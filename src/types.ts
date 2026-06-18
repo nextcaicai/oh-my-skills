@@ -1,0 +1,137 @@
+export type Settings = {
+  libraryPath: string;
+  projectFolders: string[];
+  customRoots: CustomRoot[];
+  showRawPaths: boolean;
+};
+
+export type CustomRoot = {
+  id: string;
+  label: string;
+  path: string;
+};
+
+export type AgentDefinition = {
+  id: string;
+  label: string;
+  globalRoots: string[];
+  projectRoots: string[];
+  activeSignals: string[];
+  symlinkSupport: boolean;
+};
+
+export type ResolvedRoot = {
+  agentId: string;
+  agentLabel: string;
+  scope: string;
+  path: string;
+  exists: boolean;
+  active: boolean;
+  orphaned: boolean;
+};
+
+export type SkillFrontmatter = {
+  name?: string;
+  description?: string;
+  license?: string;
+  allowedTools: string[];
+  metadata: Record<string, string>;
+};
+
+export type SkillIssue = {
+  code: string;
+  severity: string;
+  message: string;
+  path?: string;
+  agentId?: string;
+};
+
+export type SkillInstallation = {
+  id: string;
+  agentId: string;
+  agentLabel: string;
+  scope: string;
+  rootPath: string;
+  entryPath: string;
+  realPath?: string;
+  symlinkTarget?: string;
+  isSymlink: boolean;
+  brokenSymlink: boolean;
+  hash?: string;
+  frontmatter?: SkillFrontmatter;
+  status: string;
+  issues: SkillIssue[];
+};
+
+export type SkillRecord = {
+  id: string;
+  slug: string;
+  displayName: string;
+  description?: string;
+  canonicalStatus: string;
+  canonicalPath?: string;
+  canonicalHash?: string;
+  installations: SkillInstallation[];
+  missingAgents: string[];
+  issues: SkillIssue[];
+  conflict: boolean;
+};
+
+export type InventorySnapshot = {
+  agents: AgentDefinition[];
+  roots: ResolvedRoot[];
+  skills: SkillRecord[];
+  issues: SkillIssue[];
+  scannedAt: string;
+  appDataPath: string;
+  libraryPath: string;
+};
+
+export type SkillContent = {
+  path: string;
+  title: string;
+  frontmatter?: SkillFrontmatter;
+  content: string;
+  markdownBody: string;
+};
+
+export type InstallationRef = {
+  installationId: string;
+  entryPath: string;
+  slug: string;
+};
+
+export type AgentTarget = {
+  agentId: string;
+  scope?: string;
+};
+
+export type SyncOperation = {
+  id: string;
+  opType: string;
+  status: string;
+  sourcePath?: string;
+  targetPath?: string;
+  backupPath?: string;
+  message: string;
+  agentId?: string;
+  skillId?: string;
+};
+
+export type SyncPlan = {
+  planId: string;
+  kind: string;
+  riskLevel: string;
+  operations: SyncOperation[];
+  preconditions: string[];
+  blockedConflicts: string[];
+  createdAt: string;
+};
+
+export type ApplyResult = {
+  planId: string;
+  appliedOperations: string[];
+  skippedOperations: string[];
+  errors: string[];
+  inventoryRefreshRecommended: boolean;
+};
