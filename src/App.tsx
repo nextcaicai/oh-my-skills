@@ -3,7 +3,6 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   AlertTriangle,
   ArrowRight,
-  Bot,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -23,7 +22,8 @@ import {
   Sparkles,
   XCircle
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { agentIconAsset } from "./agentIconRegistry";
 import type {
   AgentRecord,
   AgentTarget,
@@ -70,7 +70,14 @@ export default function App() {
     void boot();
   }, []);
 
-  const agents = inventory?.agents ?? [];
+  const agents = useMemo(
+    () =>
+      [...(inventory?.agents ?? [])].sort((left, right) => {
+        if (left.installed !== right.installed) return left.installed ? -1 : 1;
+        return left.label.localeCompare(right.label, undefined, { sensitivity: "base" });
+      }),
+    [inventory?.agents]
+  );
   const installedAgents = useMemo(() => agents.filter((agent) => agent.installed), [agents]);
   const allSkills = inventory?.skills ?? [];
 
@@ -1020,15 +1027,23 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function AgentIcon({ agent }: { agent: AgentRecord }) {
+  const icon = agentIconAsset(agent.id);
+  const fallback = agent.label.slice(0, 2).toUpperCase();
+  const iconStyle = icon ? ({ "--agent-icon-size": `${icon.size ?? 25}px` } as CSSProperties) : undefined;
+
   return (
     <span className={`agent-icon ${agent.installed ? "installed" : ""}`}>
-      <Bot size={21} />
+      {icon ? (
+        <img alt="" aria-hidden="true" src={icon.src} style={iconStyle} />
+      ) : (
+        <em>{fallback}</em>
+      )}
     </span>
   );
 }
 
 function StatusPill({ status }: { status: string }) {
-  const label = status === "installed" ? "已安装" : status === "residual" ? "有残留" : "未安装";
+  const label = status === "installed" ? "已安装" : "未安装";
   return <span className={`status-pill ${status}`}>{label}</span>;
 }
 
@@ -1105,22 +1120,31 @@ function agentSignalSummary(agent: AgentRecord) {
 const demoAgents: AgentRecord[] = [
   demoAgent("amp", "AMP", "installed", 3, ["cli"]),
   demoAgent("antigravity", "Antigravity", "not-installed", 0, []),
+  demoAgent("augment", "Augment", "not-installed", 0, []),
   demoAgent("claude-code", "Claude Code", "installed", 8, ["cli", "config"]),
   demoAgent("cline", "Cline", "installed", 2, ["extension"]),
   demoAgent("codebuddy", "CodeBuddy", "not-installed", 0, []),
   demoAgent("codex", "Codex", "installed", 12, ["cli", "plugin-installed"]),
   demoAgent("cursor", "Cursor", "installed", 4, ["app"]),
+  demoAgent("droid", "Droid", "not-installed", 0, []),
   demoAgent("gemini-cli", "Gemini CLI", "installed", 2, ["cli"]),
-  demoAgent("github-copilot", "GitHub Copilot", "residual", 1, ["config"]),
+  demoAgent("github-copilot", "GitHub Copilot", "not-installed", 1, ["config"]),
   demoAgent("grok-cli", "Grok CLI", "not-installed", 0, []),
   demoAgent("hermes", "Hermes", "not-installed", 0, []),
+  demoAgent("junie", "Junie", "not-installed", 0, []),
   demoAgent("kilo-code", "Kilo Code", "not-installed", 0, []),
+  demoAgent("kimi", "Kimi", "not-installed", 0, []),
   demoAgent("kiro", "Kiro", "not-installed", 0, []),
   demoAgent("openclaw", "OpenClaw", "not-installed", 0, []),
   demoAgent("opencode", "OpenCode", "installed", 1, ["cli"]),
+  demoAgent("pi", "Pi", "not-installed", 0, []),
   demoAgent("qoder", "Qoder", "not-installed", 0, []),
+  demoAgent("qwen_code", "Qwen Code", "not-installed", 0, []),
   demoAgent("trae", "TRAE", "installed", 1, ["app"]),
+  demoAgent("trae_cn", "TRAE CN", "not-installed", 0, []),
+  demoAgent("warp", "Warp", "not-installed", 0, []),
   demoAgent("windsurf", "Windsurf", "installed", 3, ["app"]),
+  demoAgent("workbuddy", "WorkBuddy", "not-installed", 0, []),
   demoAgent("zed", "Zed", "installed", 2, ["app"])
 ];
 

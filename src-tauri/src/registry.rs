@@ -33,6 +33,16 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             1,
         ),
         agent(
+            "augment",
+            "Augment",
+            &["~/.augment/skills"],
+            &[".augment/skills"],
+            &["~/.augment"],
+            &["augment"],
+            &["/Applications/Augment.app", "~/Applications/Augment.app"],
+            2,
+        ),
+        agent(
             "claude-code",
             "Claude Code",
             &["~/.claude/skills"],
@@ -40,7 +50,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.claude"],
             &["claude"],
             &[],
-            2,
+            3,
         ),
         agent(
             "cline",
@@ -50,7 +60,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.cline"],
             &[],
             &[],
-            3,
+            4,
         ),
         agent(
             "codebuddy",
@@ -63,7 +73,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
                 "/Applications/CodeBuddy.app",
                 "~/Applications/CodeBuddy.app",
             ],
-            4,
+            5,
         ),
         agent(
             "codex",
@@ -73,7 +83,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.codex"],
             &["codex"],
             &[],
-            5,
+            6,
         ),
         agent(
             "cursor",
@@ -83,7 +93,17 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.cursor"],
             &["cursor"],
             &["/Applications/Cursor.app", "~/Applications/Cursor.app"],
-            6,
+            7,
+        ),
+        agent(
+            "droid",
+            "Droid",
+            &["~/.droid/skills"],
+            &[".droid/skills"],
+            &["~/.droid"],
+            &["droid"],
+            &["/Applications/Droid.app", "~/Applications/Droid.app"],
+            8,
         ),
         agent(
             "gemini-cli",
@@ -93,7 +113,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.gemini"],
             &["gemini"],
             &[],
-            7,
+            9,
         ),
         agent(
             "github-copilot",
@@ -103,7 +123,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.copilot"],
             &[],
             &[],
-            8,
+            10,
         ),
         agent(
             "grok-cli",
@@ -113,7 +133,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.grok"],
             &["grok"],
             &[],
-            9,
+            11,
         ),
         agent(
             "hermes",
@@ -123,7 +143,17 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.hermes"],
             &["hermes"],
             &["/Applications/Hermes.app", "~/Applications/Hermes.app"],
-            10,
+            12,
+        ),
+        agent(
+            "junie",
+            "Junie",
+            &["~/.junie/skills"],
+            &[".junie/skills"],
+            &["~/.junie"],
+            &["junie"],
+            &["/Applications/Junie.app", "~/Applications/Junie.app"],
+            14,
         ),
         agent(
             "kilo-code",
@@ -133,7 +163,17 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.kilocode"],
             &[],
             &[],
-            11,
+            15,
+        ),
+        agent(
+            "kimi",
+            "Kimi",
+            &["~/.kimi/skills"],
+            &[".kimi/skills"],
+            &["~/.kimi"],
+            &["kimi"],
+            &["/Applications/Kimi.app", "~/Applications/Kimi.app"],
+            16,
         ),
         agent(
             "kiro",
@@ -143,7 +183,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.kiro"],
             &["kiro"],
             &["/Applications/Kiro.app", "~/Applications/Kiro.app"],
-            12,
+            17,
         ),
         agent(
             "openclaw",
@@ -153,7 +193,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.openclaw"],
             &["openclaw"],
             &["/Applications/OpenClaw.app", "~/Applications/OpenClaw.app"],
-            13,
+            18,
         ),
         agent(
             "opencode",
@@ -163,7 +203,17 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.config/opencode"],
             &["opencode"],
             &[],
-            14,
+            19,
+        ),
+        agent(
+            "pi",
+            "Pi",
+            &["~/.pi/skills"],
+            &[".pi/skills"],
+            &["~/.pi"],
+            &["pi"],
+            &["/Applications/Pi.app", "~/Applications/Pi.app"],
+            20,
         ),
         agent(
             "qoder",
@@ -173,7 +223,22 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.qoder"],
             &["qoder"],
             &["/Applications/Qoder.app", "~/Applications/Qoder.app"],
-            15,
+            21,
+        ),
+        agent(
+            "qwen_code",
+            "Qwen Code",
+            &["~/.qwen/skills", "~/.qwen-code/skills"],
+            &[".qwen/skills", ".qwen-code/skills"],
+            &["~/.qwen", "~/.qwen-code"],
+            &["qwen", "qwen-code"],
+            &[
+                "/Applications/Qwen Code.app",
+                "/Applications/Qwen.app",
+                "~/Applications/Qwen Code.app",
+                "~/Applications/Qwen.app",
+            ],
+            22,
         ),
         agent(
             "trae",
@@ -188,7 +253,32 @@ pub fn known_agents() -> Vec<AgentDefinition> {
                 "~/Applications/TRAE.app",
                 "~/Applications/Trae.app",
             ],
-            16,
+            23,
+        ),
+        agent(
+            "trae_cn",
+            "TRAE CN",
+            &["~/.trae-cn/skills"],
+            &[".trae-cn/skills"],
+            &["~/.trae-cn"],
+            &["trae-cn"],
+            &[
+                "/Applications/TRAE CN.app",
+                "/Applications/Trae CN.app",
+                "~/Applications/TRAE CN.app",
+                "~/Applications/Trae CN.app",
+            ],
+            24,
+        ),
+        agent(
+            "warp",
+            "Warp",
+            &["~/.warp/skills"],
+            &[".warp/skills"],
+            &["~/.warp"],
+            &["warp"],
+            &["/Applications/Warp.app", "~/Applications/Warp.app"],
+            25,
         ),
         agent(
             "windsurf",
@@ -198,7 +288,20 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.codeium/windsurf"],
             &["windsurf"],
             &["/Applications/Windsurf.app", "~/Applications/Windsurf.app"],
-            17,
+            26,
+        ),
+        agent(
+            "workbuddy",
+            "WorkBuddy",
+            &["~/.workbuddy/skills"],
+            &[".workbuddy/skills"],
+            &["~/.workbuddy"],
+            &["workbuddy"],
+            &[
+                "/Applications/WorkBuddy.app",
+                "~/Applications/WorkBuddy.app",
+            ],
+            27,
         ),
         agent(
             "zed",
@@ -208,7 +311,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["~/.config/zed"],
             &["zed"],
             &["/Applications/Zed.app", "~/Applications/Zed.app"],
-            18,
+            28,
         ),
     ];
 
@@ -230,7 +333,7 @@ pub fn detect_agents(settings: &Settings, include_orphaned: bool) -> Vec<AgentRe
         false,
     );
 
-    definitions
+    let mut records = definitions
         .into_iter()
         .map(|definition| {
             let detection_sources = install_map.get(&definition.id).cloned().unwrap_or_default();
@@ -247,8 +350,6 @@ pub fn detect_agents(settings: &Settings, include_orphaned: bool) -> Vec<AgentRe
                 .sum::<usize>();
             let status = if installed {
                 "installed"
-            } else if skill_entry_count > 0 || has_residual_evidence(&detection_sources) {
-                "residual"
             } else {
                 "not-installed"
             };
@@ -270,7 +371,10 @@ pub fn detect_agents(settings: &Settings, include_orphaned: bool) -> Vec<AgentRe
                 skill_entry_count,
             }
         })
-        .collect()
+        .collect::<Vec<_>>();
+
+    records.sort_by_key(|agent| (!agent.installed, agent.label.to_ascii_lowercase()));
+    records
 }
 
 pub fn resolve_roots(settings: &Settings, include_orphaned: bool) -> Vec<ResolvedRoot> {
@@ -510,10 +614,6 @@ fn has_install_evidence(sources: &[AgentDetectionSource]) -> bool {
             "cli" | "app" | "extension" | "plugin-installed"
         )
     })
-}
-
-fn has_residual_evidence(sources: &[AgentDetectionSource]) -> bool {
-    sources.iter().any(|source| source.kind == "config")
 }
 
 fn push_source(
@@ -887,25 +987,34 @@ mod tests {
     fn known_agents_include_all_default_tools() {
         let agents = known_agents();
         let labels: Vec<String> = agents.iter().map(|agent| agent.label.clone()).collect();
-        assert_eq!(agents.len(), 19);
+        assert_eq!(agents.len(), 28);
         assert!(labels.contains(&"AMP".to_string()));
         assert!(labels.contains(&"Antigravity".to_string()));
+        assert!(labels.contains(&"Augment".to_string()));
         assert!(labels.contains(&"Claude Code".to_string()));
         assert!(labels.contains(&"Cline".to_string()));
         assert!(labels.contains(&"CodeBuddy".to_string()));
         assert!(labels.contains(&"Codex".to_string()));
         assert!(labels.contains(&"Cursor".to_string()));
+        assert!(labels.contains(&"Droid".to_string()));
         assert!(labels.contains(&"Gemini CLI".to_string()));
         assert!(labels.contains(&"GitHub Copilot".to_string()));
         assert!(labels.contains(&"Grok CLI".to_string()));
         assert!(labels.contains(&"Hermes".to_string()));
+        assert!(labels.contains(&"Junie".to_string()));
         assert!(labels.contains(&"Kilo Code".to_string()));
+        assert!(labels.contains(&"Kimi".to_string()));
         assert!(labels.contains(&"Kiro".to_string()));
         assert!(labels.contains(&"OpenClaw".to_string()));
         assert!(labels.contains(&"OpenCode".to_string()));
+        assert!(labels.contains(&"Pi".to_string()));
         assert!(labels.contains(&"Qoder".to_string()));
+        assert!(labels.contains(&"Qwen Code".to_string()));
         assert!(labels.contains(&"TRAE".to_string()));
+        assert!(labels.contains(&"TRAE CN".to_string()));
+        assert!(labels.contains(&"Warp".to_string()));
         assert!(labels.contains(&"Windsurf".to_string()));
+        assert!(labels.contains(&"WorkBuddy".to_string()));
         assert!(labels.contains(&"Zed".to_string()));
     }
 
@@ -919,19 +1028,6 @@ mod tests {
     }
 
     #[test]
-    fn config_source_is_not_install_evidence() {
-        let sources = vec![AgentDetectionSource {
-            kind: "config".to_string(),
-            label: "~/.example".to_string(),
-            path: "/Users/example/.example".to_string(),
-            exists: true,
-        }];
-
-        assert!(!has_install_evidence(&sources));
-        assert!(has_residual_evidence(&sources));
-    }
-
-    #[test]
     fn extension_source_is_install_evidence() {
         let sources = vec![AgentDetectionSource {
             kind: "extension".to_string(),
@@ -941,7 +1037,6 @@ mod tests {
         }];
 
         assert!(has_install_evidence(&sources));
-        assert!(!has_residual_evidence(&sources));
     }
 
     #[test]
@@ -954,7 +1049,6 @@ mod tests {
         }];
 
         assert!(has_install_evidence(&sources));
-        assert!(!has_residual_evidence(&sources));
     }
 
     #[test]

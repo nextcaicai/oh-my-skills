@@ -343,11 +343,26 @@ p {
 .agent-icon {
   width: 44px;
   height: 44px;
+  position: relative;
+  overflow: hidden;
 }
 
 .agent-icon.installed {
   background: #fffaf1;
   color: #2a1914;
+}
+
+.agent-icon img {
+  width: var(--agent-icon-size, 25px);
+  height: var(--agent-icon-size, 25px);
+  object-fit: contain;
+}
+
+.agent-icon em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0;
 }
 
 .agent-main strong,
