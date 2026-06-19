@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Circle,
   CopyCheck,
@@ -429,6 +430,7 @@ export default function App() {
             onToggleSkill={toggleSkill}
             onAdopt={previewAdopt}
             onSelectForSync={selectForSync}
+            onRefresh={() => void refreshInventory()}
           />
         )}
 
@@ -586,7 +588,8 @@ function SkillsView({
   onSelectSkill,
   onToggleSkill,
   onAdopt,
-  onSelectForSync
+  onSelectForSync,
+  onRefresh
 }: {
   agents: AgentRecord[];
   skills: SkillRecord[];
@@ -605,113 +608,217 @@ function SkillsView({
   onToggleSkill: (id: string) => void;
   onAdopt: (skill: SkillRecord) => void;
   onSelectForSync: (skill: SkillRecord) => void;
+  onRefresh: () => void;
 }) {
+  const [agentMenuOpen, setAgentMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const selectedAgentLabel = agentFilter === "all"
+    ? "全部 Agent"
+    : agents.find((agent) => agent.id === agentFilter)?.label ?? "全部 Agent";
+  const globalSkillCount = allSkills.filter((skill) =>
+    skill.installations.some((installation) => installation.scope === "global")
+  ).length;
+  const tabSummary = scopeFilter === "all"
+    ? `已发现 Skills ${allSkills.length} 个，包含全局范围和项目范围生效的全部 Skills，已去重`
+    : scopeFilter === "global"
+      ? `已发现全局范围生效的 Skills ${globalSkillCount} 个，已去重`
+      : "已发现项目范围生效的 Skills 及其关联项目";
+
   return (
     <div className="skills-page">
-      <aside className="filter-rail">
-        <div className="rail-title">Skills 范围</div>
-        <button className={agentFilter === "all" ? "active" : ""} onClick={() => onAgentFilter("all")}>
-          <span>全部 Skills</span>
-          <strong>{allSkills.length}</strong>
-        </button>
-        {agents.map((agent) => (
-          <button className={agentFilter === agent.id ? "active" : ""} key={agent.id} onClick={() => onAgentFilter(agent.id)}>
-            <span>{agent.label}</span>
-            <strong>{agentSkillCount(agent.id, allSkills)}</strong>
-          </button>
-        ))}
-      </aside>
-
-      <section className="skill-list-pane">
-        <div className="pane-header">
-          <div className="searchbox">
-            <Search size={17} />
-            <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="搜索 Skill、简介或 Agent" />
-          </div>
-          <div className="segmented">
+      <section className="skills-workbench">
+        <div className="skills-toolbar">
+          <div className="scope-tabs" role="tablist" aria-label="Skills 范围">
             {(["all", "global", "project"] as ScopeFilter[]).map((scope) => (
               <button
                 className={scopeFilter === scope ? "active" : ""}
                 key={scope}
                 onClick={() => onScopeFilter(scope)}
+                role="tab"
+                type="button"
+                aria-selected={scopeFilter === scope}
               >
                 {scope === "all" ? "全部" : scope === "global" ? "全局" : "项目"}
               </button>
             ))}
           </div>
+
+          <div className="skills-toolbar-actions">
+            {searchOpen && (
+              <div className="searchbox compact">
+                <Search size={16} />
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(event) => onQuery(event.target.value)}
+                  placeholder="搜索 Skill、简介或 Agent"
+                />
+              </div>
+            )}
+            <button
+              className={`icon-button plain ${searchOpen ? "active" : ""}`}
+              onClick={() => {
+                setAgentMenuOpen(false);
+                setSearchOpen((open) => !open);
+              }}
+              title="搜索"
+              type="button"
+            >
+              <Search size={18} />
+            </button>
+            <button className="icon-button plain" onClick={onRefresh} title="重新扫描" type="button">
+              <RefreshCw size={17} />
+            </button>
+            <div className="agent-menu-wrap">
+              <button className="agent-menu-trigger" onClick={() => setAgentMenuOpen((open) => !open)} type="button">
+                <span>{selectedAgentLabel}</span>
+                <ChevronDown size={14} />
+              </button>
+              {agentMenuOpen && (
+                <div className="agent-menu" role="menu">
+                  <button
+                    className={agentFilter === "all" ? "active" : ""}
+                    onClick={() => {
+                      onAgentFilter("all");
+                      setAgentMenuOpen(false);
+                    }}
+                    type="button"
+                  >
+                    <span>全部 Agent</span>
+                    <strong>{allSkills.length}</strong>
+                  </button>
+                  {agents.map((agent) => (
+                    <button
+                      className={agentFilter === agent.id ? "active" : ""}
+                      key={agent.id}
+                      onClick={() => {
+                        onAgentFilter(agent.id);
+                        setAgentMenuOpen(false);
+                      }}
+                      type="button"
+                    >
+                      <span>{agent.label}</span>
+                      <strong>{agentSkillCount(agent.id, allSkills)}</strong>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="skills-summary">
+          <span>{tabSummary}</span>
         </div>
 
-        <div className="skill-list">
-          {skills.map((skill) => (
-            <SkillRow
-              key={skill.id}
-              skill={skill}
-              active={selectedSkill?.id === skill.id}
-              checked={selectedSkillIds.has(skill.id)}
-              onSelect={() => onSelectSkill(skill.id)}
-              onToggle={() => onToggleSkill(skill.id)}
+        <div className="skill-list-board">
+          <div className="skill-table-head">
+            <span />
+            <span>Skill</span>
+            <span>Agent 覆盖</span>
+          </div>
+
+          <div className="skill-list">
+            {skills.map((skill) => (
+              <SkillRow
+                key={skill.id}
+                skill={skill}
+                agents={agents}
+                active={selectedSkill?.id === skill.id}
+                checked={selectedSkillIds.has(skill.id)}
+                onSelect={() => onSelectSkill(skill.id)}
+                onToggle={() => onToggleSkill(skill.id)}
+              />
+            ))}
+            {skills.length === 0 && (
+              <div className="empty-list">
+                <FileText size={28} />
+                <strong>没有匹配的 Skills</strong>
+                <span>试试切回全部 Agent、全部范围或清空搜索。</span>
+              </div>
+            )}
+          </div>
+
+          {selectedSkill ? (
+            <SkillDetail
+              skill={selectedSkill}
+              content={skillContent}
+              settings={settings}
+              selected={selectedSkillIds.has(selectedSkill.id)}
+              onToggle={() => onToggleSkill(selectedSkill.id)}
+              onAdopt={() => onAdopt(selectedSkill)}
+              onSelectForSync={() => onSelectForSync(selectedSkill)}
             />
-          ))}
-          {skills.length === 0 && (
-            <div className="empty-list">
-              <FileText size={28} />
-              <strong>没有匹配的 Skills</strong>
-              <span>试试切回全部范围或清空搜索。</span>
+          ) : (
+            <div className="empty-detail skill-inspector-empty">
+              <FileText size={34} />
+              <strong>选择一个 Skill</strong>
+              <span>这里会显示 SKILL.md、安装位置和同步入口。</span>
             </div>
           )}
         </div>
       </section>
-
-      <aside className="detail-pane">
-        {selectedSkill ? (
-          <SkillDetail
-            skill={selectedSkill}
-            content={skillContent}
-            settings={settings}
-            selected={selectedSkillIds.has(selectedSkill.id)}
-            onToggle={() => onToggleSkill(selectedSkill.id)}
-            onAdopt={() => onAdopt(selectedSkill)}
-            onSelectForSync={() => onSelectForSync(selectedSkill)}
-          />
-        ) : (
-          <div className="empty-detail">
-            <FileText size={34} />
-            <strong>选择一个 Skill</strong>
-            <span>这里会显示 SKILL.md、安装位置和同步入口。</span>
-          </div>
-        )}
-      </aside>
     </div>
   );
 }
 
 function SkillRow({
   skill,
+  agents,
   active,
   checked,
   onSelect,
   onToggle
 }: {
   skill: SkillRecord;
+  agents: AgentRecord[];
   active: boolean;
   checked: boolean;
   onSelect: () => void;
   onToggle: () => void;
 }) {
   return (
-    <article className={`skill-row ${active ? "active" : ""}`}>
-      <button className={`select-dot ${checked ? "checked" : ""}`} onClick={onToggle} title="选择同步">
+    <article className={`skill-row ${active ? "active" : ""}`} onClick={onSelect}>
+      <button
+        className={`select-dot ${checked ? "checked" : ""}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggle();
+        }}
+        title="选择同步"
+        type="button"
+      >
         {checked ? <Check size={14} /> : <Circle size={13} />}
       </button>
-      <button className="skill-row-main" onClick={onSelect}>
-        <strong>{skill.displayName}</strong>
+      <button className="skill-row-main" onClick={onSelect} type="button">
+        <strong>
+          {skill.displayName}
+          <em>{skill.canonicalStatus === "imported" ? "本地" : "外部"}</em>
+        </strong>
         <span>{skill.description || skill.slug}</span>
       </button>
-      <div className="skill-row-meta">
-        <Coverage skill={skill} />
-        <SkillState skill={skill} />
-      </div>
+      <SkillAgentStack skill={skill} agents={agents} />
     </article>
+  );
+}
+
+function SkillAgentStack({ skill, agents }: { skill: SkillRecord; agents: AgentRecord[] }) {
+  const knownAgents = skill.installations
+    .map((installation) => {
+      const agent = agents.find((item) => item.id === installation.agentId);
+      if (agent) return agent;
+      return demoAgent(installation.agentId, installation.agentLabel, installation.status, 0, []);
+    })
+    .slice(0, 5);
+  const extra = Math.max(0, skill.installations.length - knownAgents.length);
+
+  return (
+    <div className="skill-agent-stack" aria-label="已安装 Agent">
+      {knownAgents.map((agent) => (
+        <AgentIcon agent={agent} key={agent.id} />
+      ))}
+      {extra > 0 && <span className="agent-extra">+{extra}</span>}
+      {knownAgents.length === 0 && <span className="muted">未安装</span>}
+    </div>
   );
 }
 
@@ -739,7 +846,7 @@ function SkillDetail({
     <div className="skill-detail">
       <div className="detail-title">
         <span className="detail-icon">
-          <FileText size={22} />
+          <FileText size={20} />
         </span>
         <div>
           <h2>{skill.displayName}</h2>
@@ -762,12 +869,13 @@ function SkillDetail({
         </button>
       </div>
 
-      <div className="mini-grid">
+      <div className="detail-summary">
         <InfoBlock label="状态" value={skill.conflict ? "内容冲突" : skill.canonicalStatus === "imported" ? "已导入" : "外部来源"} />
-        <InfoBlock label="安装位置" value={`${skill.installations.length} 个 Agent`} />
+        <InfoBlock label="安装位置" value={`${skill.installations.length} 个`} />
+        <InfoBlock label="缺失 Agent" value={`${skill.missingAgents.length} 个`} />
       </div>
 
-      <section className="detail-section">
+      <section className="detail-section install-section">
         <h3>安装在</h3>
         <div className="install-list">
           {skill.installations.map((installation) => (
@@ -783,13 +891,13 @@ function SkillDetail({
       </section>
 
       {skill.issues.length > 0 && (
-        <section className="detail-section">
+        <section className="detail-section issue-section">
           <h3>问题</h3>
           <IssueList issues={skill.issues} />
         </section>
       )}
 
-      <section className="detail-section">
+      <section className="detail-section markdown-section">
         <h3>SKILL.md</h3>
         {currentPath && <code className="path-code">{currentPath}</code>}
         {content ? <pre className="markdown-preview">{content.content}</pre> : <p className="muted">没有可读取的 SKILL.md。</p>}

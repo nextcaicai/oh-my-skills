@@ -165,6 +165,9 @@ fn scan_canonical_library(
             )
         })?;
         let path = entry.path();
+        if is_hidden_skill_entry(&path) {
+            continue;
+        }
         if !entry
             .file_type()
             .map(|file_type| file_type.is_dir())
@@ -228,6 +231,9 @@ fn scan_root(
         if !(metadata.is_dir() || metadata.file_type().is_symlink()) {
             continue;
         }
+        if is_hidden_skill_entry(&path) {
+            continue;
+        }
 
         let slug = skill_slug_from_path(&path)?;
         let installation = inspect_installation(
@@ -245,6 +251,12 @@ fn scan_root(
     }
 
     Ok(())
+}
+
+fn is_hidden_skill_entry(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with('.'))
 }
 
 pub fn inspect_installation(
@@ -575,5 +587,43 @@ mod tests {
 
         assert!(grouped.contains_key("direct-skill"));
         assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn skips_hidden_entries_inside_skill_roots() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let root = temp.path().join("skills");
+        let hidden = root.join(".system");
+        let visible = root.join("visible-skill");
+        fs::create_dir_all(&hidden).expect("hidden dir");
+        fs::create_dir_all(&visible).expect("visible dir");
+        fs::write(
+            visible.join("SKILL.md"),
+            "---\nname: visible-skill\ndescription: Visible\n---\nBody",
+        )
+        .expect("visible skill md");
+
+        let root = ResolvedRoot {
+            agent_id: "test".to_string(),
+            agent_label: "Test".to_string(),
+            scope: "global".to_string(),
+            path: path_to_string(&root),
+            exists: true,
+            active: true,
+            orphaned: false,
+        };
+        let mut grouped = BTreeMap::new();
+        let mut issues = Vec::new();
+
+        scan_root(&root, temp.path(), &mut grouped, &mut issues).expect("scan root");
+
+        assert!(grouped.contains_key("visible-skill"));
+        assert!(!grouped.contains_key(".system"));
+        assert!(issues.iter().all(|issue| {
+            issue
+                .path
+                .as_deref()
+                .map_or(true, |path| !path.ends_with(".system"))
+        }));
     }
 }

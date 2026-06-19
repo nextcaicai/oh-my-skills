@@ -432,14 +432,9 @@ p {
 }
 
 .skills-page {
-  display: grid;
-  grid-template-columns: 210px minmax(340px, 1fr) minmax(320px, 0.82fr);
-  gap: 12px;
+  display: block;
 }
 
-.filter-rail,
-.skill-list-pane,
-.detail-pane,
 .queue-pane,
 .plan-pane,
 .settings-sheet {
@@ -450,55 +445,57 @@ p {
   box-shadow: 0 16px 48px rgba(55, 84, 116, 0.08);
 }
 
-.filter-rail {
-  overflow: auto;
-  padding: 12px 8px;
+.skills-workbench {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  flex-direction: column;
+  gap: 10px;
+  overflow: visible;
 }
 
-.rail-title {
-  padding: 0 9px 8px;
-  color: rgba(23, 32, 46, 0.58);
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.filter-rail button {
+.skills-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
-  min-height: 32px;
-  padding: 0 9px;
-  border-radius: 8px;
-  background: transparent;
-  color: rgba(23, 32, 46, 0.72);
-  cursor: pointer;
-  text-align: left;
+  min-height: 36px;
+  padding: 0;
 }
 
-.filter-rail button.active,
-.filter-rail button:hover {
-  background: rgba(25, 111, 145, 0.12);
-  color: #123b5c;
-}
-
-.filter-rail strong {
-  color: rgba(23, 32, 46, 0.58);
-  font-size: 11px;
-}
-
-.skill-list-pane {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
-}
-
-.pane-header {
-  display: flex;
-  gap: 8px;
+.scope-tabs {
+  display: inline-flex;
+  gap: 3px;
   align-items: center;
-  padding: 10px;
-  border-bottom: 1px solid rgba(30, 54, 83, 0.10);
+  width: max-content;
+  padding: 3px;
+  border: 1px solid rgba(30, 54, 83, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.scope-tabs button {
+  min-width: 68px;
+  min-height: 28px;
+  padding: 0 13px;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(23, 32, 46, 0.66);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.scope-tabs button.active {
+  background: #123b5c;
+  color: #f8fcff;
+}
+
+.skills-toolbar-actions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .searchbox {
@@ -514,6 +511,83 @@ p {
   color: rgba(23, 32, 46, 0.58);
 }
 
+.searchbox.compact {
+  width: 230px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(21, 58, 91, 0.06);
+  font-size: 12px;
+}
+
+.agent-menu-wrap {
+  position: relative;
+}
+
+.agent-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 28px;
+  padding: 0;
+  background: transparent;
+  color: #17202e;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.agent-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 5;
+  display: grid;
+  width: 190px;
+  max-height: 330px;
+  overflow: auto;
+  padding: 8px 0;
+  border: 1px solid rgba(30, 54, 83, 0.12);
+  border-radius: 8px;
+  background: #f5f7f7;
+  box-shadow: 0 18px 50px rgba(55, 84, 116, 0.18);
+}
+
+.agent-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  padding: 0 12px;
+  background: transparent;
+  color: #17202e;
+  cursor: pointer;
+  text-align: left;
+  font-size: 15px;
+}
+
+.agent-menu button.active,
+.agent-menu button:hover {
+  background: rgba(25, 111, 145, 0.12);
+}
+
+.agent-menu strong {
+  color: rgba(23, 32, 46, 0.44);
+  font-size: 11px;
+}
+
+.icon-button.plain {
+  width: 28px;
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  color: #17202e;
+}
+
+.icon-button.plain.active,
+.icon-button.plain:hover {
+  background: rgba(21, 58, 91, 0.08);
+}
+
 .searchbox input,
 .field input,
 .field select {
@@ -522,6 +596,14 @@ p {
   outline: 0;
   background: transparent;
   color: #17202e;
+}
+
+.skills-summary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  color: rgba(23, 32, 46, 0.58);
+  font-size: 12px;
 }
 
 .segmented {
@@ -548,25 +630,52 @@ p {
   color: #f8fcff;
 }
 
+.skill-list-board {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr) minmax(190px, 0.46fr);
+  overflow: hidden;
+  border: 1px solid rgba(30, 54, 83, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: 0 16px 48px rgba(55, 84, 116, 0.08);
+}
+
+.skill-table-head {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 230px;
+  gap: 10px;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(30, 54, 83, 0.08);
+  color: rgba(23, 32, 46, 0.42);
+  font-size: 11px;
+  font-weight: 850;
+}
+
 .skill-list {
   min-height: 0;
   overflow: auto;
-  padding: 6px;
+  padding: 0 18px 8px;
 }
 
 .skill-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 120px;
+  grid-template-columns: 34px minmax(0, 1fr) 230px;
   align-items: center;
-  gap: 7px;
-  min-height: 56px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  gap: 10px;
+  min-height: 62px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(30, 54, 83, 0.10);
+  border-radius: 0;
+  cursor: pointer;
 }
 
 .skill-row.active,
 .skill-row:hover {
-  background: rgba(25, 111, 145, 0.12);
+  background: rgba(25, 111, 145, 0.08);
 }
 
 .select-dot {
@@ -593,10 +702,55 @@ p {
   text-align: left;
 }
 
+.skill-row-main strong {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.skill-row-main strong em {
+  color: rgba(23, 32, 46, 0.40);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
 .skill-row-main span {
   margin-top: 3px;
   color: rgba(23, 32, 46, 0.58);
   font-size: 11px;
+}
+
+.skill-agent-stack {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.skill-agent-stack .agent-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: transparent;
+}
+
+.skill-agent-stack .agent-icon img {
+  max-width: 19px;
+  max-height: 19px;
+}
+
+.agent-extra {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 7px;
+  background: rgba(21, 58, 91, 0.07);
+  color: rgba(23, 32, 46, 0.58);
+  font-size: 11px;
+  font-weight: 850;
 }
 
 .skill-row-meta {
@@ -630,14 +784,16 @@ p {
   font-style: normal;
 }
 
-.detail-pane {
-  overflow: auto;
-}
-
 .skill-detail {
   display: grid;
+  grid-template-columns: minmax(220px, 0.74fr) 116px minmax(230px, 0.72fr) minmax(180px, 0.58fr) minmax(320px, 1.08fr);
   gap: 12px;
-  padding: 14px;
+  align-items: start;
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px 18px;
+  border-top: 1px solid rgba(30, 54, 83, 0.14);
+  background: rgba(246, 250, 252, 0.82);
 }
 
 .detail-title {
@@ -647,12 +803,12 @@ p {
 }
 
 .detail-icon {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
 }
 
 .detail-title h2 {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .detail-title p,
@@ -662,14 +818,13 @@ p {
 }
 
 .detail-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 6px;
 }
 
-.mini-grid {
+.detail-summary {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -695,6 +850,7 @@ p {
 .detail-section {
   display: grid;
   gap: 7px;
+  min-width: 0;
 }
 
 .detail-section h3,
@@ -712,6 +868,14 @@ p {
   gap: 5px;
 }
 
+.issue-section {
+  display: none;
+}
+
+.install-section {
+  overflow: hidden;
+}
+
 .install-row,
 .queued-skill,
 .operation,
@@ -723,6 +887,16 @@ p {
   padding: 6px 8px;
   border-radius: 8px;
   background: rgba(21, 58, 91, 0.07);
+}
+
+.install-section .install-list {
+  max-height: 142px;
+  overflow: auto;
+}
+
+.install-section .install-row {
+  min-height: 30px;
+  padding: 4px 6px;
 }
 
 .install-row span:nth-child(2) {
@@ -749,8 +923,12 @@ p {
   background: rgba(21, 58, 91, 0.07);
 }
 
+.markdown-section {
+  grid-row: span 2;
+}
+
 .markdown-preview {
-  max-height: 440px;
+  max-height: 148px;
   margin: 0;
   overflow: auto;
   padding: 10px;
@@ -761,6 +939,11 @@ p {
   font-size: 11px;
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+.skill-inspector-empty {
+  min-height: 190px;
+  border-top: 1px solid rgba(30, 54, 83, 0.12);
 }
 
 .sync-page {
