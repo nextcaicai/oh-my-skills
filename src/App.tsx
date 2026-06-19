@@ -30,6 +30,7 @@ import type {
   AgentTarget,
   ApplyResult,
   InventorySnapshot,
+  ProjectWorkspaceCandidate,
   Settings as AppSettings,
   SkillContent,
   SkillInstallation,
@@ -39,7 +40,7 @@ import type {
 } from "./types";
 
 type View = "agents" | "skills" | "sync";
-type ScopeFilter = "all" | "global" | "project";
+type SkillWorkspace = "global" | "project";
 type AgentViewFilter = "all" | "installed";
 
 const defaultSettings: AppSettings = {
@@ -55,9 +56,12 @@ export default function App() {
   const [draftSettings, setDraftSettings] = useState<AppSettings>(defaultSettings);
   const [inventory, setInventory] = useState<InventorySnapshot | null>(null);
   const [view, setView] = useState<View>("agents");
+  const [skillWorkspace, setSkillWorkspace] = useState<SkillWorkspace>("global");
   const [query, setQuery] = useState("");
   const [agentFilter, setAgentFilter] = useState("all");
-  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
+  const [selectedProjectFolder, setSelectedProjectFolder] = useState<string | null>(null);
+  const [discoveredProjects, setDiscoveredProjects] = useState<ProjectWorkspaceCandidate[]>([]);
+  const [discoveryBasePath, setDiscoveryBasePath] = useState<string | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(new Set());
   const [skillContent, setSkillContent] = useState<SkillContent | null>(null);
@@ -82,6 +86,14 @@ export default function App() {
   const installedAgents = useMemo(() => agents.filter((agent) => agent.installed), [agents]);
   const installedAgentIds = useMemo(() => new Set(installedAgents.map((agent) => agent.id)), [installedAgents]);
   const allSkills = inventory?.skills ?? [];
+  const projectFolders = settings.projectFolders;
+
+  useEffect(() => {
+    setSelectedProjectFolder((current) => {
+      if (current && projectFolders.includes(current)) return current;
+      return projectFolders[0] ?? null;
+    });
+  }, [projectFolders]);
 
   useEffect(() => {
     if (agentFilter !== "all" && !installedAgentIds.has(agentFilter)) {
@@ -89,15 +101,23 @@ export default function App() {
     }
   }, [agentFilter, installedAgentIds]);
 
+  const globalSkills = useMemo(
+    () => allSkills.filter((skill) => skill.installations.some((item) => item.scope === "global")),
+    [allSkills]
+  );
+
+  const projectSkills = useMemo(
+    () => projectSkillsForFolder(allSkills, selectedProjectFolder),
+    [allSkills, selectedProjectFolder]
+  );
+
+  const visibleSourceSkills = skillWorkspace === "project" ? projectSkills : globalSkills;
+
   const filteredSkills = useMemo(() => {
     const needle = query.trim().toLowerCase();
 
-    return allSkills.filter((skill) => {
+    return visibleSourceSkills.filter((skill) => {
       if (agentFilter !== "all" && !skill.installations.some((item) => item.agentId === agentFilter)) {
-        return false;
-      }
-
-      if (scopeFilter !== "all" && !skill.installations.some((item) => item.scope === scopeFilter)) {
         return false;
       }
 
@@ -112,11 +132,11 @@ export default function App() {
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [agentFilter, allSkills, query, scopeFilter]);
+  }, [agentFilter, query, visibleSourceSkills]);
 
   const selectedSkill = useMemo(
-    () => allSkills.find((skill) => skill.id === selectedSkillId) ?? filteredSkills[0] ?? null,
-    [allSkills, filteredSkills, selectedSkillId]
+    () => filteredSkills.find((skill) => skill.id === selectedSkillId) ?? filteredSkills[0] ?? null,
+    [filteredSkills, selectedSkillId]
   );
 
   const queuedSkills = useMemo(
@@ -329,21 +349,102 @@ export default function App() {
     }
   }
 
-  async function addProjectFolder() {
-    const selected = await open({ directory: true, multiple: false, title: "添加项目目录" });
+  async function saveProjectFolders(projectFolders: string[], busyLabel: string) {
+    const nextSettings = {
+      ...settings,
+      projectFolders
+    };
+    setBusy(busyLabel);
+    setError(null);
+    try {
+      if (isTauriRuntime()) {
+        const saved = await invoke<AppSettings>("save_settings", { settings: nextSettings });
+        setSettings(saved);
+        setDraftSettings(saved);
+      } else {
+        setSettings(nextSettings);
+        setDraftSettings(nextSettings);
+      }
+      await refreshInventory();
+      return nextSettings;
+    } catch (reason) {
+      setError(String(reason));
+      return null;
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function addProjectPath(path: string) {
+    const projectFolders = Array.from(new Set([...settings.projectFolders, path]));
+    const saved = await saveProjectFolders(projectFolders, "关联项目工作区");
+    if (!saved) return;
+    setSelectedProjectFolder(path);
+    setSkillWorkspace("project");
+    setView("skills");
+    setDiscoveredProjects((current) =>
+      current.map((candidate) => candidate.path === path ? { ...candidate, alreadyLinked: true } : candidate)
+    );
+  }
+
+  async function addProjectWorkspace() {
+    const selected = await open({ directory: true, multiple: false, title: "关联项目工作区" });
     if (typeof selected !== "string") return;
-    setDraftSettings((current) => ({
-      ...current,
-      projectFolders: Array.from(new Set([...current.projectFolders, selected]))
-    }));
+    await addProjectPath(selected);
+  }
+
+  async function discoverProjectWorkspaces() {
+    const selected = await open({ directory: true, multiple: false, title: "扫描发现项目工作区" });
+    if (typeof selected !== "string") return;
+    setBusy("扫描发现项目工作区");
+    setError(null);
+    setSkillWorkspace("project");
+    setView("skills");
+    setDiscoveryBasePath(selected);
+    try {
+      if (!isTauriRuntime()) {
+        setDiscoveredProjects([]);
+        return;
+      }
+      const candidates = await invoke<ProjectWorkspaceCandidate[]>("discover_project_workspaces", {
+        basePath: selected
+      });
+      setDiscoveredProjects(candidates);
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function removeProjectWorkspace(folder: string) {
+    const nextProjectFolders = settings.projectFolders.filter((item) => item !== folder);
+    const saved = await saveProjectFolders(nextProjectFolders, "移除项目工作区");
+    if (!saved) return;
+    if (selectedProjectFolder === folder) {
+      setSelectedProjectFolder(saved.projectFolders[0] ?? null);
+    }
+    setDiscoveredProjects((current) =>
+      current.map((candidate) => candidate.path === folder ? { ...candidate, alreadyLinked: false } : candidate)
+    );
+  }
+
+  function addDraftProjectFolder() {
+    void open({ directory: true, multiple: false, title: "添加项目工作区" }).then((selected) => {
+      if (typeof selected !== "string") return;
+      setDraftSettings((current) => ({
+        ...current,
+        projectFolders: Array.from(new Set([...current.projectFolders, selected]))
+      }));
+    });
   }
 
   function openAgentSkills(agent: AgentRecord) {
     setAgentFilter(agent.id);
-    setScopeFilter("all");
     setQuery("");
+    setSkillWorkspace("global");
     setView("skills");
-    const firstSkill = allSkills.find((skill) => skill.installations.some((item) => item.agentId === agent.id));
+    const firstSkill = globalSkills.find((skill) => skill.installations.some((item) => item.agentId === agent.id));
     setSelectedSkillId(firstSkill?.id ?? null);
   }
 
@@ -416,21 +517,42 @@ export default function App() {
             agents={installedAgents}
             skills={filteredSkills}
             allSkills={allSkills}
+            sourceSkills={visibleSourceSkills}
+            workspace={skillWorkspace}
+            projectFolders={projectFolders}
+            selectedProjectFolder={selectedProjectFolder}
+            discoveredProjects={discoveredProjects}
+            discoveryBasePath={discoveryBasePath}
+            discovering={busy === "扫描发现项目工作区"}
             selectedSkill={selectedSkill}
             selectedSkillIds={selectedSkillIds}
             skillContent={skillContent}
             query={query}
             agentFilter={agentFilter}
-            scopeFilter={scopeFilter}
             settings={settings}
             onQuery={setQuery}
             onAgentFilter={setAgentFilter}
-            onScopeFilter={setScopeFilter}
+            onWorkspace={(workspace) => {
+              setSkillWorkspace(workspace);
+              setSelectedSkillId(null);
+              setQuery("");
+              setAgentFilter("all");
+            }}
+            onSelectProject={(folder) => {
+              setSelectedProjectFolder(folder);
+              setSelectedSkillId(null);
+              setQuery("");
+              setAgentFilter("all");
+            }}
             onSelectSkill={setSelectedSkillId}
             onToggleSkill={toggleSkill}
             onAdopt={previewAdopt}
             onSelectForSync={selectForSync}
             onRefresh={() => void refreshInventory()}
+            onAddProject={() => void addProjectWorkspace()}
+            onDiscoverProjects={() => void discoverProjectWorkspaces()}
+            onLinkDiscoveredProject={(path) => void addProjectPath(path)}
+            onRemoveProject={(folder) => void removeProjectWorkspace(folder)}
           />
         )}
 
@@ -466,7 +588,7 @@ export default function App() {
             setSettingsOpen(false);
           }}
           onSave={() => void saveSettings()}
-          onAddProjectFolder={() => void addProjectFolder()}
+          onAddProjectFolder={addDraftProjectFolder}
         />
       )}
     </main>
@@ -575,70 +697,101 @@ function SkillsView({
   agents,
   skills,
   allSkills,
+  sourceSkills,
+  workspace,
+  projectFolders,
+  selectedProjectFolder,
+  discoveredProjects,
+  discoveryBasePath,
+  discovering,
   selectedSkill,
   selectedSkillIds,
   skillContent,
   query,
   agentFilter,
-  scopeFilter,
   settings,
   onQuery,
   onAgentFilter,
-  onScopeFilter,
+  onWorkspace,
+  onSelectProject,
   onSelectSkill,
   onToggleSkill,
   onAdopt,
   onSelectForSync,
-  onRefresh
+  onRefresh,
+  onAddProject,
+  onDiscoverProjects,
+  onLinkDiscoveredProject,
+  onRemoveProject
 }: {
   agents: AgentRecord[];
   skills: SkillRecord[];
   allSkills: SkillRecord[];
+  sourceSkills: SkillRecord[];
+  workspace: SkillWorkspace;
+  projectFolders: string[];
+  selectedProjectFolder: string | null;
+  discoveredProjects: ProjectWorkspaceCandidate[];
+  discoveryBasePath: string | null;
+  discovering: boolean;
   selectedSkill: SkillRecord | null;
   selectedSkillIds: Set<string>;
   skillContent: SkillContent | null;
   query: string;
   agentFilter: string;
-  scopeFilter: ScopeFilter;
   settings: AppSettings;
   onQuery: (value: string) => void;
   onAgentFilter: (value: string) => void;
-  onScopeFilter: (value: ScopeFilter) => void;
+  onWorkspace: (value: SkillWorkspace) => void;
+  onSelectProject: (folder: string) => void;
   onSelectSkill: (id: string) => void;
   onToggleSkill: (id: string) => void;
   onAdopt: (skill: SkillRecord) => void;
   onSelectForSync: (skill: SkillRecord) => void;
   onRefresh: () => void;
+  onAddProject: () => void;
+  onDiscoverProjects: () => void;
+  onLinkDiscoveredProject: (path: string) => void;
+  onRemoveProject: (folder: string) => void;
 }) {
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const selectedAgentLabel = agentFilter === "all"
     ? "全部 Agent"
     : agents.find((agent) => agent.id === agentFilter)?.label ?? "全部 Agent";
-  const globalSkillCount = allSkills.filter((skill) =>
-    skill.installations.some((installation) => installation.scope === "global")
-  ).length;
-  const tabSummary = scopeFilter === "all"
-    ? `已发现 Skills ${allSkills.length} 个，包含全局范围和项目范围生效的全部 Skills，已去重`
-    : scopeFilter === "global"
-      ? `已发现全局范围生效的 Skills ${globalSkillCount} 个，已去重`
-      : "已发现项目范围生效的 Skills 及其关联项目";
+  const isProjectWorkspace = workspace === "project";
+  const tabSummary = isProjectWorkspace
+    ? selectedProjectFolder
+      ? `管理 ${projectName(selectedProjectFolder)} 内生效的 Agent Skills，已发现 ${sourceSkills.length} 个。`
+      : "关联一个项目工作区后，可以管理该项目内各 Agent 生效的 Skills。"
+    : `管理这台机器上各 Agent 的全局 Skills，已发现 ${sourceSkills.length} 个。`;
+  const hasProjectWorkspaces = projectFolders.length > 0;
+  const emptyTitle = isProjectWorkspace
+    ? hasProjectWorkspaces
+      ? "这个项目还没有项目级 Skills"
+      : "尚未关联项目工作区"
+    : "还没有全局 Skills";
+  const emptyBody = isProjectWorkspace
+    ? hasProjectWorkspaces
+      ? "可以从中心库同步到当前项目，或创建某个 Agent 的项目 skills 目录。"
+      : "选择一个项目根目录后，Oh My Skills 会自动检测该项目下各 Agent 的项目级 Skills。"
+    : "重新扫描或从中心库同步到某个 Agent 后，这里会显示机器级生效的 Skills。";
 
   return (
     <div className="skills-page">
       <section className="skills-workbench">
         <div className="skills-toolbar">
-          <div className="scope-tabs" role="tablist" aria-label="Skills 范围">
-            {(["all", "global", "project"] as ScopeFilter[]).map((scope) => (
+          <div className="scope-tabs workspace-tabs" role="tablist" aria-label="Skills 工作区">
+            {(["global", "project"] as SkillWorkspace[]).map((scope) => (
               <button
-                className={scopeFilter === scope ? "active" : ""}
+                className={workspace === scope ? "active" : ""}
                 key={scope}
-                onClick={() => onScopeFilter(scope)}
+                onClick={() => onWorkspace(scope)}
                 role="tab"
                 type="button"
-                aria-selected={scopeFilter === scope}
+                aria-selected={workspace === scope}
               >
-                {scope === "all" ? "全部" : scope === "global" ? "全局" : "项目"}
+                {scope === "global" ? "全局工作区" : "项目工作区"}
               </button>
             ))}
           </div>
@@ -685,7 +838,7 @@ function SkillsView({
                     type="button"
                   >
                     <span>全部 Agent</span>
-                    <strong>{allSkills.length}</strong>
+                    <strong>{sourceSkills.length}</strong>
                   </button>
                   {agents.map((agent) => (
                     <button
@@ -698,7 +851,7 @@ function SkillsView({
                       type="button"
                     >
                       <span>{agent.label}</span>
-                      <strong>{agentSkillCount(agent.id, allSkills)}</strong>
+                      <strong>{agentSkillCount(agent.id, sourceSkills)}</strong>
                     </button>
                   ))}
                 </div>
@@ -708,7 +861,94 @@ function SkillsView({
         </div>
         <div className="skills-summary">
           <span>{tabSummary}</span>
+          {isProjectWorkspace && (
+            <div className="button-pair compact">
+              <button className="secondary-button" onClick={onAddProject} type="button">
+                <FolderPlus size={16} />
+                关联项目
+              </button>
+              <button className="secondary-button" onClick={onDiscoverProjects} type="button">
+                <Search size={16} />
+                扫描发现
+              </button>
+            </div>
+          )}
         </div>
+
+        {isProjectWorkspace && (discovering || discoveryBasePath || discoveredProjects.length > 0) && (
+          <section className="discovery-panel">
+            <div className="discovery-heading">
+              <span>
+                <strong>扫描发现</strong>
+                {discoveryBasePath && <small>{discoveryBasePath}</small>}
+              </span>
+              <button className="secondary-button" onClick={onDiscoverProjects} type="button">
+                {discovering ? <Loader2 className="spin" size={16} /> : <Search size={16} />}
+                重新扫描
+              </button>
+            </div>
+            <div className="discovery-list">
+              {discoveredProjects.map((candidate) => (
+                <article className="discovery-card" key={candidate.path}>
+                  <span>
+                    <strong>{candidate.name}</strong>
+                    <code>{candidate.path}</code>
+                  </span>
+                  <div className="discovery-agents">
+                    {candidate.agentRoots.map((root) => (
+                      <AgentBadge label={`${root.agentLabel} · ${root.skillCount}`} status="linked" key={`${candidate.path}-${root.agentId}`} />
+                    ))}
+                  </div>
+                  <button
+                    className="secondary-button"
+                    disabled={candidate.alreadyLinked}
+                    onClick={() => onLinkDiscoveredProject(candidate.path)}
+                    type="button"
+                  >
+                    <Check size={16} />
+                    {candidate.alreadyLinked ? "已关联" : "关联"}
+                  </button>
+                </article>
+              ))}
+              {!discovering && discoveryBasePath && discoveredProjects.length === 0 && (
+                <div className="empty-inline">
+                  <FileText size={20} />
+                  <span>没有发现包含项目级 Skills 的工作区。</span>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {isProjectWorkspace && hasProjectWorkspaces && (
+          <div className="project-workspace-bar" aria-label="已关联项目工作区">
+            {projectFolders.map((folder) => {
+              const stats = projectStats(folder, allSkills);
+              const active = selectedProjectFolder === folder;
+              return (
+                <button
+                  className={`project-chip ${active ? "active" : ""}`}
+                  key={folder}
+                  onClick={() => onSelectProject(folder)}
+                  type="button"
+                >
+                  <span>
+                    <strong>{projectName(folder)}</strong>
+                    <small>{folder}</small>
+                  </span>
+                  <em>{stats.skillCount} Skills · {stats.agentLabels.length || 0} Agents</em>
+                  <XCircle
+                    size={15}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRemoveProject(folder);
+                    }}
+                  />
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div className="skill-list-board">
           <div className="skill-table-head">
@@ -732,8 +972,20 @@ function SkillsView({
             {skills.length === 0 && (
               <div className="empty-list">
                 <FileText size={28} />
-                <strong>没有匹配的 Skills</strong>
-                <span>试试切回全部 Agent、全部范围或清空搜索。</span>
+                <strong>{emptyTitle}</strong>
+                <span>{query || agentFilter !== "all" ? "试试切换 Agent 或清空搜索。" : emptyBody}</span>
+                {isProjectWorkspace && !hasProjectWorkspaces && (
+                  <div className="button-pair">
+                    <button className="primary-button" onClick={onAddProject} type="button">
+                      <FolderPlus size={16} />
+                      关联项目工作区
+                    </button>
+                    <button className="secondary-button" onClick={onDiscoverProjects} type="button">
+                      <Search size={16} />
+                      扫描发现
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1208,6 +1460,45 @@ function IssueList({ issues }: { issues: SkillIssue[] }) {
 
 function firstValidInstallation(skill: SkillRecord): SkillInstallation | null {
   return skill.installations.find((installation) => installation.status !== "invalid" && !installation.brokenSymlink) ?? null;
+}
+
+function projectSkillsForFolder(skills: SkillRecord[], folder: string | null): SkillRecord[] {
+  if (!folder) return [];
+  const projectSkills: SkillRecord[] = [];
+  for (const skill of skills) {
+    const installations = skill.installations.filter((installation) =>
+      installation.scope === "project" && isPathInFolder(installation.rootPath, folder)
+    );
+    if (installations.length === 0) continue;
+    projectSkills.push({
+      ...skill,
+      installations,
+      missingAgents: []
+    });
+  }
+  return projectSkills;
+}
+
+function projectName(folder: string) {
+  const clean = folder.replace(/\/+$/, "");
+  return clean.split("/").pop() || clean;
+}
+
+function projectStats(folder: string, skills: SkillRecord[]) {
+  const projectSkills = projectSkillsForFolder(skills, folder);
+  const agentLabels = projectSkills
+    .flatMap((skill) => skill.installations.map((installation) => installation.agentLabel))
+    .filter((label, index, labels) => labels.indexOf(label) === index);
+  return {
+    skillCount: projectSkills.length,
+    agentLabels
+  };
+}
+
+function isPathInFolder(path: string, folder: string) {
+  const normalizedPath = path.replace(/\/+$/, "");
+  const normalizedFolder = folder.replace(/\/+$/, "");
+  return normalizedPath === normalizedFolder || normalizedPath.startsWith(`${normalizedFolder}/`);
 }
 
 function agentSkillCount(agentId: string, skills: SkillRecord[]) {

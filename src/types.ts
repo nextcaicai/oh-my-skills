@@ -46,6 +46,21 @@ export type ResolvedRoot = {
   orphaned: boolean;
 };
 
+export type ProjectWorkspaceAgentRoot = {
+  agentId: string;
+  agentLabel: string;
+  path: string;
+  skillCount: number;
+};
+
+export type ProjectWorkspaceCandidate = {
+  name: string;
+  path: string;
+  agentRoots: ProjectWorkspaceAgentRoot[];
+  skillCount: number;
+  alreadyLinked: boolean;
+};
+
 export type SkillFrontmatter = {
   name?: string;
   description?: string;

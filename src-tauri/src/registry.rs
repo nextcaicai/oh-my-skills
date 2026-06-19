@@ -1,11 +1,14 @@
 use crate::fs_ops::{expand_home, path_to_string};
 use crate::models::{
-    AgentDefinition, AgentDetectionSource, AgentRecord, CustomRoot, ResolvedRoot, Settings,
+    AgentDefinition, AgentDetectionSource, AgentRecord, CustomRoot, ProjectWorkspaceAgentRoot,
+    ProjectWorkspaceCandidate, ResolvedRoot, Settings,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+const PROJECT_DISCOVERY_DEPTH: usize = 2;
 
 pub fn known_agents() -> Vec<AgentDefinition> {
     let mut agents = vec![
@@ -380,6 +383,37 @@ pub fn find_agent(id: &str) -> Option<AgentDefinition> {
     known_agents().into_iter().find(|agent| agent.id == id)
 }
 
+pub fn discover_project_workspaces(
+    base_path: &str,
+    settings: &Settings,
+) -> Result<Vec<ProjectWorkspaceCandidate>, String> {
+    let base = expand_home(base_path);
+    if !base.exists() {
+        return Err(format!(
+            "Scan root does not exist: {}",
+            path_to_string(&base)
+        ));
+    }
+    if !base.is_dir() {
+        return Err(format!(
+            "Scan root is not a directory: {}",
+            path_to_string(&base)
+        ));
+    }
+
+    let definitions = known_agents();
+    let mut candidates = Vec::new();
+    collect_project_candidates(&base, 0, &definitions, settings, &mut candidates)?;
+    candidates.sort_by_key(|candidate| {
+        (
+            candidate.already_linked,
+            std::cmp::Reverse(candidate.skill_count),
+            candidate.name.to_ascii_lowercase(),
+        )
+    });
+    Ok(candidates)
+}
+
 fn agent(
     id: &str,
     label: &str,
@@ -471,6 +505,121 @@ fn resolve_roots_for_definitions(
     }
 
     dedupe_roots(roots)
+}
+
+fn collect_project_candidates(
+    path: &Path,
+    depth: usize,
+    definitions: &[AgentDefinition],
+    settings: &Settings,
+    candidates: &mut Vec<ProjectWorkspaceCandidate>,
+) -> Result<(), String> {
+    if depth > 0 && should_skip_project_discovery_dir(path) {
+        return Ok(());
+    }
+
+    if let Some(candidate) = inspect_project_candidate(path, definitions, settings) {
+        candidates.push(candidate);
+    }
+
+    if depth >= PROJECT_DISCOVERY_DEPTH {
+        return Ok(());
+    }
+
+    let entries = fs::read_dir(path)
+        .map_err(|error| format!("Unable to scan {}: {error}", path_to_string(path)))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            format!("Unable to read entry in {}: {error}", path_to_string(path))
+        })?;
+        let entry_path = entry.path();
+        if !entry_path.is_dir() || should_skip_project_discovery_dir(&entry_path) {
+            continue;
+        }
+        collect_project_candidates(&entry_path, depth + 1, definitions, settings, candidates)?;
+    }
+
+    Ok(())
+}
+
+fn inspect_project_candidate(
+    path: &Path,
+    definitions: &[AgentDefinition],
+    settings: &Settings,
+) -> Option<ProjectWorkspaceCandidate> {
+    let mut agent_roots = Vec::new();
+    for definition in definitions {
+        for relative in &definition.project_roots {
+            let root = path.join(relative);
+            if !root.exists() || !root.is_dir() {
+                continue;
+            }
+            let skill_count = count_skill_entries(&root);
+            if skill_count == 0 {
+                continue;
+            }
+            agent_roots.push(ProjectWorkspaceAgentRoot {
+                agent_id: definition.id.clone(),
+                agent_label: definition.label.clone(),
+                path: path_to_string(&root),
+                skill_count,
+            });
+        }
+    }
+
+    if agent_roots.is_empty() {
+        return None;
+    }
+
+    let skill_count = agent_roots.iter().map(|root| root.skill_count).sum();
+    let project_path = path_to_string(path);
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(&project_path)
+        .to_string();
+    let already_linked = settings.project_folders.iter().any(|folder| {
+        let linked = expand_home(folder);
+        linked == path
+    });
+
+    Some(ProjectWorkspaceCandidate {
+        name,
+        path: project_path,
+        agent_roots,
+        skill_count,
+        already_linked,
+    })
+}
+
+fn count_skill_entries(root: &Path) -> usize {
+    let mut count = 0;
+    if root.join("SKILL.md").is_file() {
+        count += 1;
+    }
+
+    let Ok(entries) = fs::read_dir(root) else {
+        return count;
+    };
+
+    for entry in entries.flatten() {
+        let entry_path = entry.path();
+        if entry_path.is_dir() && entry_path.join("SKILL.md").is_file() {
+            count += 1;
+        }
+    }
+
+    count
+}
+
+fn should_skip_project_discovery_dir(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return true;
+    };
+    if name.starts_with('.') {
+        return true;
+    }
+    matches!(name, "node_modules" | "target" | "dist" | "build" | "venv")
 }
 
 fn push_root(
@@ -1103,5 +1252,35 @@ enabled = true
 
         assert_eq!(count_root_entries(temp.path()), 1);
         assert!(has_skill_entries(temp.path()));
+    }
+
+    #[test]
+    fn project_discovery_does_not_treat_agent_config_folder_as_project() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let project = temp.path().join("skills-hub");
+        let skill = project.join(".claude").join("skills").join("review");
+        fs::create_dir_all(&skill).expect("skill dir");
+        fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: review\ndescription: Review\n---\nBody",
+        )
+        .expect("skill md");
+
+        let settings = Settings {
+            library_path: path_to_string(&temp.path().join("library")),
+            project_folders: Vec::new(),
+            custom_roots: Vec::new(),
+            show_raw_paths: false,
+            language: "zh-CN".to_string(),
+        };
+        let candidates =
+            discover_project_workspaces(&path_to_string(temp.path()), &settings).expect("discover");
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].name, "skills-hub");
+        assert_eq!(candidates[0].agent_roots[0].agent_label, "Claude Code");
+        assert!(!candidates
+            .iter()
+            .any(|candidate| candidate.name == ".claude"));
     }
 }

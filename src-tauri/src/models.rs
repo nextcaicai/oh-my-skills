@@ -86,6 +86,25 @@ pub struct ResolvedRoot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectWorkspaceAgentRoot {
+    pub agent_id: String,
+    pub agent_label: String,
+    pub path: String,
+    pub skill_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectWorkspaceCandidate {
+    pub name: String,
+    pub path: String,
+    pub agent_roots: Vec<ProjectWorkspaceAgentRoot>,
+    pub skill_count: usize,
+    pub already_linked: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct SkillFrontmatter {
     pub name: Option<String>,
     pub description: Option<String>,

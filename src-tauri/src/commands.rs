@@ -1,8 +1,8 @@
 use crate::models::{
-    AgentTarget, ApplyResult, InstallationRef, InventorySnapshot, ScanOptions, Settings,
-    SkillContent, SkillRef, SyncPlan,
+    AgentTarget, ApplyResult, InstallationRef, InventorySnapshot, ProjectWorkspaceCandidate,
+    ScanOptions, Settings, SkillContent, SkillRef, SyncPlan,
 };
-use crate::{scanner, settings, sync_plan};
+use crate::{registry, scanner, settings, sync_plan};
 use tauri::AppHandle;
 
 #[tauri::command]
@@ -27,6 +27,15 @@ pub fn scan_inventory(
             include_orphaned: false,
         }),
     )
+}
+
+#[tauri::command]
+pub fn discover_project_workspaces(
+    app: AppHandle,
+    base_path: String,
+) -> Result<Vec<ProjectWorkspaceCandidate>, String> {
+    let settings = settings::load_settings(&app)?;
+    registry::discover_project_workspaces(&base_path, &settings)
 }
 
 #[tauri::command]

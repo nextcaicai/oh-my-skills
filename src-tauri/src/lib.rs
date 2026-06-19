@@ -13,6 +13,7 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
             commands::scan_inventory,
+            commands::discover_project_workspaces,
             commands::read_skill_content,
             commands::preview_adopt,
             commands::preview_sync,

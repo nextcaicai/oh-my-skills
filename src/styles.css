@@ -499,6 +499,10 @@ p {
   color: #f8fcff;
 }
 
+.workspace-tabs button {
+  min-width: 112px;
+}
+
 .skills-toolbar-actions {
   position: relative;
   display: inline-flex;
@@ -609,7 +613,154 @@ p {
 .skills-summary {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  color: rgba(23, 32, 46, 0.58);
+  font-size: 12px;
+}
+
+.project-workspace-bar {
+  display: flex;
+  min-height: 64px;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.project-chip {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto 16px;
+  align-items: center;
+  gap: 10px;
+  min-width: 270px;
+  max-width: 360px;
+  min-height: 58px;
+  padding: 8px 10px;
+  border: 1px solid rgba(30, 54, 83, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  color: #17202e;
+  cursor: pointer;
+  text-align: left;
+}
+
+.project-chip.active,
+.project-chip:hover {
+  border-color: rgba(18, 59, 92, 0.28);
+  background: rgba(25, 111, 145, 0.12);
+}
+
+.project-chip span,
+.project-chip strong,
+.project-chip small {
+  min-width: 0;
+}
+
+.project-chip strong,
+.project-chip small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-chip strong {
+  font-size: 13px;
+}
+
+.project-chip small,
+.project-chip em {
+  color: rgba(23, 32, 46, 0.58);
+  font-size: 11px;
+}
+
+.project-chip em {
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.project-chip svg {
+  color: rgba(23, 32, 46, 0.46);
+}
+
+.discovery-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(30, 54, 83, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.discovery-heading,
+.discovery-card,
+.empty-inline {
+  display: flex;
+  align-items: center;
+}
+
+.discovery-heading {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.discovery-heading span,
+.discovery-card > span {
+  min-width: 0;
+}
+
+.discovery-heading strong,
+.discovery-heading small,
+.discovery-card strong {
+  display: block;
+}
+
+.discovery-heading strong,
+.discovery-card strong {
+  font-size: 13px;
+}
+
+.discovery-heading small {
+  margin-top: 2px;
+  color: rgba(23, 32, 46, 0.58);
+  font-size: 11px;
+}
+
+.discovery-list {
+  display: grid;
+  gap: 6px;
+  max-height: 186px;
+  overflow: auto;
+}
+
+.discovery-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, auto) auto;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(21, 58, 91, 0.07);
+}
+
+.discovery-card code {
+  margin-top: 4px;
+  padding: 0;
+  background: transparent;
+}
+
+.discovery-agents {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.empty-inline {
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
   color: rgba(23, 32, 46, 0.58);
   font-size: 12px;
 }
@@ -1005,6 +1156,10 @@ p {
 .button-pair {
   display: flex;
   gap: 8px;
+}
+
+.button-pair.compact {
+  gap: 6px;
 }
 
 .field {
