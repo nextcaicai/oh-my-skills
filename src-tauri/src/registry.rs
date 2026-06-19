@@ -10,7 +10,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
     let mut agents = vec![
         agent(
             "amp",
-            "Amp",
+            "AMP",
             &["~/.config/agents/skills"],
             &[".agents/skills"],
             &["~/.config/agents"],
@@ -110,16 +110,6 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             8,
         ),
         agent(
-            "goose",
-            "Goose",
-            &["~/.agents/skills"],
-            &[".agents/skills"],
-            &["~/.goose"],
-            &["goose"],
-            &["/Applications/Goose.app", "~/Applications/Goose.app"],
-            102,
-        ),
-        agent(
             "grok-cli",
             "Grok CLI",
             &["~/.agents/skills"],
@@ -188,16 +178,6 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             &["qoder"],
             &["/Applications/Qoder.app", "~/Applications/Qoder.app"],
             15,
-        ),
-        agent(
-            "roo-code",
-            "Roo Code",
-            &["~/.agents/skills"],
-            &[".agents/skills"],
-            &["~/.roo"],
-            &[],
-            &[],
-            103,
         ),
         agent(
             "trae",
@@ -872,7 +852,8 @@ mod tests {
     fn known_agents_include_all_default_tools() {
         let agents = known_agents();
         let labels: Vec<String> = agents.iter().map(|agent| agent.label.clone()).collect();
-        assert_eq!(agents.len(), 21);
+        assert_eq!(agents.len(), 19);
+        assert!(labels.contains(&"AMP".to_string()));
         assert!(labels.contains(&"Antigravity".to_string()));
         assert!(labels.contains(&"Claude Code".to_string()));
         assert!(labels.contains(&"Cline".to_string()));
@@ -896,7 +877,7 @@ mod tests {
     #[test]
     fn shared_agents_root_does_not_mark_agents_installed() {
         let agents = known_agents();
-        for id in ["grok-cli", "goose", "roo-code", "zed"] {
+        for id in ["grok-cli", "zed"] {
             let agent = agents.iter().find(|agent| agent.id == id).expect("agent");
             assert!(!agent.active_signals.contains(&"~/.agents".to_string()));
         }
