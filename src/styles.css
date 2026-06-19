@@ -186,6 +186,43 @@ code {
   font-size: 13px;
 }
 
+.language-switch,
+.segmented-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #d6cec2;
+  border-radius: 8px;
+  background: #fffdfa;
+}
+
+.language-switch button,
+.segmented-control button {
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 6px;
+  background: transparent;
+  color: #596160;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.language-switch button.active,
+.segmented-control button.active {
+  background: #165f59;
+  color: #ffffff;
+}
+
+.segmented-control {
+  width: fit-content;
+}
+
+.segmented-control button {
+  min-width: 86px;
+}
+
 .icon-button,
 .primary-button,
 .secondary-button {
@@ -298,6 +335,10 @@ h3 {
 
 .grid-skills {
   grid-template-columns: minmax(240px, 1.4fr) 138px 116px minmax(160px, 1fr);
+}
+
+.grid-agents {
+  grid-template-columns: minmax(220px, 1.1fr) 132px minmax(220px, 1fr) minmax(180px, 0.9fr);
 }
 
 .thead {
@@ -424,6 +465,57 @@ h3 {
   gap: 6px;
   align-items: center;
   min-width: 0;
+}
+
+.agent-row {
+  cursor: default;
+}
+
+.root-summary,
+.signal-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.root-summary em,
+.signal-list em {
+  color: #767b78;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.root-chip,
+.signal-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  max-width: 160px;
+  overflow: hidden;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.root-chip.ready,
+.signal-chip {
+  background: #dcefe9;
+  color: #116055;
+}
+
+.root-chip.missing {
+  background: #e7e8e3;
+  color: #58615f;
+}
+
+.root-chip.orphaned {
+  background: #f7e7bf;
+  color: #855b10;
 }
 
 .agent-list em {

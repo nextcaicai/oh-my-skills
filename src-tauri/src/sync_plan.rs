@@ -5,7 +5,7 @@ use crate::fs_ops::{
 use crate::models::{
     AgentTarget, ApplyResult, InstallationRef, ScanOptions, SyncOperation, SyncPlan,
 };
-use crate::registry::find_agent;
+use crate::registry::{detect_agents, find_agent};
 use crate::scanner::{inspect_installation, scan};
 use crate::settings::{app_data_dir, load_settings};
 use chrono::Utc;
@@ -111,8 +111,14 @@ pub fn preview_sync(
         None
     };
 
+    let installed_agent_ids = detect_agents(&settings, false)
+        .into_iter()
+        .filter(|agent| agent.installed)
+        .map(|agent| agent.id)
+        .collect::<std::collections::BTreeSet<_>>();
+
     let targets = if targets.is_empty() {
-        default_targets()
+        default_targets(&settings)
     } else {
         targets
     };
@@ -124,6 +130,10 @@ pub fn preview_sync(
         };
         if !agent.symlink_support {
             blocked_conflicts.push(format!("{} does not support symlink sync", agent.label));
+            continue;
+        }
+        if !installed_agent_ids.contains(&agent.id) {
+            blocked_conflicts.push(format!("{} is not detected as installed", agent.label));
             continue;
         }
         let Some(root) = agent.global_roots.first() else {
@@ -372,9 +382,10 @@ fn plan_target_sync(
     }
 }
 
-fn default_targets() -> Vec<AgentTarget> {
-    crate::registry::known_agents()
+fn default_targets(settings: &crate::models::Settings) -> Vec<AgentTarget> {
+    crate::registry::detect_agents(settings, false)
         .into_iter()
+        .filter(|agent| agent.installed)
         .map(|agent| AgentTarget {
             agent_id: agent.id,
             scope: Some("global".to_string()),

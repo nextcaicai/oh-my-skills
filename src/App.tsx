@@ -13,18 +13,31 @@ import {
   Library,
   Link2,
   Loader2,
+  MonitorCheck,
   RefreshCw,
   Search,
   Settings as SettingsIcon,
   ShieldCheck,
   Sparkles,
-  Table2,
   Wrench,
   XCircle
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import {
+  LANGUAGES,
+  type Language,
+  agentStatusLabel,
+  detectionKindLabel,
+  issueLabel,
+  normalizeLanguage,
+  opTypeLabel,
+  riskLabel,
+  statusLabel,
+  t
+} from "./i18n";
 import type {
   AgentTarget,
+  AgentRecord,
   ApplyResult,
   InventorySnapshot,
   Settings,
@@ -35,13 +48,14 @@ import type {
   SyncPlan
 } from "./types";
 
-type View = "skills" | "compare" | "preview" | "settings";
+type View = "agents" | "skills" | "compare" | "preview" | "settings";
 
 const defaultSettings: Settings = {
   libraryPath: "",
   projectFolders: [],
   customRoots: [],
-  showRawPaths: false
+  showRawPaths: false,
+  language: "zh-CN"
 };
 
 export default function App() {
@@ -50,7 +64,7 @@ export default function App() {
   const [inventory, setInventory] = useState<InventorySnapshot | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [skillContent, setSkillContent] = useState<SkillContent | null>(null);
-  const [view, setView] = useState<View>("skills");
+  const [view, setView] = useState<View>("agents");
   const [query, setQuery] = useState("");
   const [includeOrphaned, setIncludeOrphaned] = useState(false);
   const [selectedTargets, setSelectedTargets] = useState<Record<string, boolean>>({});
@@ -58,6 +72,8 @@ export default function App() {
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [busy, setBusy] = useState("Starting");
   const [error, setError] = useState<string | null>(null);
+  const language = normalizeLanguage(settings.language);
+  const draftLanguage = normalizeLanguage(draftSettings.language);
 
   useEffect(() => {
     void boot();
@@ -214,12 +230,24 @@ export default function App() {
   }
 
   async function addProjectFolder() {
-    const selected = await open({ directory: true, multiple: false, title: "Add project folder" });
+    const selected = await open({ directory: true, multiple: false, title: t(language, "projectFolders") });
     if (typeof selected !== "string") return;
     setDraftSettings((current) => ({
       ...current,
       projectFolders: Array.from(new Set([...current.projectFolders, selected]))
     }));
+  }
+
+  function updateLanguage(nextLanguage: Language) {
+    const nextSettings = { ...settings, language: nextLanguage };
+    setSettings(nextSettings);
+    setDraftSettings((current) => ({ ...current, language: nextLanguage }));
+    void invoke<Settings>("save_settings", { settings: nextSettings })
+      .then((saved) => {
+        setSettings(saved);
+        setDraftSettings((current) => ({ ...current, language: saved.language }));
+      })
+      .catch((reason) => setError(String(reason)));
   }
 
   return (
@@ -231,35 +259,42 @@ export default function App() {
           </div>
           <div>
             <strong>Oh My Skills</strong>
-            <span>Local Agent Workbench</span>
+            <span>{t(language, "appSubtitle")}</span>
           </div>
         </div>
 
         <nav className="nav">
+          <NavButton icon={<MonitorCheck size={17} />} active={view === "agents"} onClick={() => setView("agents")}>
+            {t(language, "navAgents")}
+          </NavButton>
           <NavButton icon={<Library size={17} />} active={view === "skills"} onClick={() => setView("skills")}>
-            Skills
+            {t(language, "navSkills")}
           </NavButton>
           <NavButton icon={<Columns3 size={17} />} active={view === "compare"} onClick={() => setView("compare")}>
-            Compare
+            {t(language, "navCompare")}
           </NavButton>
           <NavButton icon={<ShieldCheck size={17} />} active={view === "preview"} onClick={() => setView("preview")}>
-            Sync Preview
+            {t(language, "navPreview")}
           </NavButton>
           <NavButton icon={<SettingsIcon size={17} />} active={view === "settings"} onClick={() => setView("settings")}>
-            Settings
+            {t(language, "navSettings")}
           </NavButton>
         </nav>
 
         <div className="sidebar-stat">
-          <span>Skills</span>
+          <span>{t(language, "statTotalAgents")}</span>
+          <strong>{inventory?.agents.length ?? 0}</strong>
+        </div>
+        <div className="sidebar-stat">
+          <span>{t(language, "statSkills")}</span>
           <strong>{inventory?.skills.length ?? 0}</strong>
         </div>
         <div className="sidebar-stat">
-          <span>Agents</span>
-          <strong>{inventory?.agents.length ?? 0}</strong>
+          <span>{t(language, "statAgents")}</span>
+          <strong>{inventory?.agents.filter((agent) => agent.installed).length ?? 0}</strong>
         </div>
         <div className="sidebar-stat danger">
-          <span>Issues</span>
+          <span>{t(language, "statIssues")}</span>
           <strong>{inventory?.issues.length ?? 0}</strong>
         </div>
       </aside>
@@ -271,9 +306,10 @@ export default function App() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search skills, descriptions, agents"
+              placeholder={t(language, "searchPlaceholder")}
             />
           </div>
+          <LanguageSwitch language={language} onChange={updateLanguage} />
           <label className="toggle">
             <input
               type="checkbox"
@@ -283,9 +319,9 @@ export default function App() {
                 void refreshInventory(event.target.checked);
               }}
             />
-            Include orphaned roots
+            {t(language, "includeOrphaned")}
           </label>
-          <button className="icon-button" onClick={() => void refreshInventory()} title="Rescan">
+          <button className="icon-button" onClick={() => void refreshInventory()} title={t(language, "rescan")}>
             {busy ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
           </button>
         </header>
@@ -297,16 +333,20 @@ export default function App() {
           </div>
         )}
 
+        {view === "agents" && inventory && (
+          <AgentsView inventory={inventory} language={language} />
+        )}
         {view === "skills" && (
           <SkillsView
             skills={filteredSkills}
             selectedSkillId={selectedSkillId}
             onSelect={setSelectedSkillId}
             settings={settings}
+            language={language}
           />
         )}
         {view === "compare" && inventory && (
-          <CompareView inventory={inventory} skills={filteredSkills} />
+          <CompareView inventory={inventory} skills={filteredSkills} language={language} />
         )}
         {view === "preview" && (
           <PreviewView
@@ -314,6 +354,7 @@ export default function App() {
             applyResult={applyResult}
             busy={Boolean(busy)}
             onApply={() => void applyPlan()}
+            language={language}
           />
         )}
         {view === "settings" && (
@@ -324,6 +365,7 @@ export default function App() {
             onChange={setDraftSettings}
             onSave={() => void saveSettings()}
             onAddProjectFolder={() => void addProjectFolder()}
+            language={draftLanguage}
           />
         )}
       </section>
@@ -339,6 +381,7 @@ export default function App() {
         onAdopt={previewAdopt}
         onSync={previewSync}
         showRawPaths={settings.showRawPaths}
+        language={language}
       />
     </main>
   );
@@ -364,33 +407,129 @@ function NavButton({
   );
 }
 
+function LanguageSwitch({
+  language,
+  onChange
+}: {
+  language: Language;
+  onChange: (language: Language) => void;
+}) {
+  return (
+    <div className="language-switch" aria-label="Language">
+      {LANGUAGES.map((item) => (
+        <button
+          key={item.code}
+          className={language === item.code ? "active" : ""}
+          onClick={() => onChange(item.code)}
+          title={item.label}
+        >
+          {item.shortLabel}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AgentsView({
+  inventory,
+  language
+}: {
+  inventory: InventorySnapshot;
+  language: Language;
+}) {
+  const installedCount = inventory.agents.filter((agent) => agent.installed).length;
+
+  return (
+    <div className="panel">
+      <div className="panel-title">
+        <div>
+          <h1>{t(language, "agentsTitle")}</h1>
+          <p>{t(language, "agentsDescription")}</p>
+        </div>
+        <span className="path-chip">
+          {installedCount}/{inventory.agents.length} {t(language, "agentInstalled")}
+        </span>
+      </div>
+
+      <div className="table agent-table">
+        <div className="thead grid-agents">
+          <span>{t(language, "tableAgent")}</span>
+          <span>{t(language, "tableInstallState")}</span>
+          <span>{t(language, "tableSkillRoots")}</span>
+          <span>{t(language, "tableDetectionSignals")}</span>
+        </div>
+        <div className="tbody">
+          {inventory.agents.map((agent) => (
+            <div className="tr grid-agents agent-row" key={agent.id}>
+              <span>
+                <strong>{agent.label}</strong>
+                <small>{agent.globalRoots.join(" · ")}</small>
+              </span>
+              <span>
+                <AgentStatusPill agent={agent} language={language} />
+              </span>
+              <span className="root-summary">
+                {agent.skillRoots.length === 0 && <em>{t(language, "agentRootMissing")}</em>}
+                {agent.skillRoots.map((root) => (
+                  <span
+                    key={`${root.scope}-${root.path}`}
+                    className={`root-chip ${root.orphaned ? "orphaned" : root.exists ? "ready" : "missing"}`}
+                    title={root.path}
+                  >
+                    {root.scope}: {root.orphaned
+                      ? t(language, "agentRootOrphaned")
+                      : root.exists
+                        ? t(language, "agentRootReady")
+                        : t(language, "agentRootMissing")}
+                  </span>
+                ))}
+                {agent.skillEntryCount > 0 && <em>{agent.skillEntryCount}</em>}
+              </span>
+              <span className="signal-list">
+                {agent.detectionSources.length === 0 && <em>{t(language, "noDetectionSignals")}</em>}
+                {agent.detectionSources.map((source) => (
+                  <span className="signal-chip" title={source.path} key={`${source.kind}-${source.path}`}>
+                    {detectionKindLabel(language, source.kind)}
+                  </span>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SkillsView({
   skills,
   selectedSkillId,
   onSelect,
-  settings
+  settings,
+  language
 }: {
   skills: SkillRecord[];
   selectedSkillId: string | null;
   onSelect: (id: string) => void;
   settings: Settings;
+  language: Language;
 }) {
   return (
     <div className="panel">
       <div className="panel-title">
         <div>
-          <h1>Skills Inventory</h1>
-          <p>Find where a skill lives, what is missing, and whether it is safe to sync.</p>
+          <h1>{t(language, "skillsTitle")}</h1>
+          <p>{t(language, "skillsDescription")}</p>
         </div>
-        <span className="path-chip">{settings.libraryPath || "Library not initialized"}</span>
+        <span className="path-chip">{settings.libraryPath || t(language, "libraryNotInitialized")}</span>
       </div>
 
       <div className="table skill-table">
         <div className="thead grid-skills">
-          <span>Skill</span>
-          <span>Coverage</span>
-          <span>State</span>
-          <span>Sources</span>
+          <span>{t(language, "tableSkill")}</span>
+          <span>{t(language, "tableCoverage")}</span>
+          <span>{t(language, "tableState")}</span>
+          <span>{t(language, "tableSources")}</span>
         </div>
         <div className="tbody">
           {skills.map((skill) => (
@@ -407,11 +546,16 @@ function SkillsView({
                 <Coverage skill={skill} />
               </span>
               <span>
-                <StatePill skill={skill} />
+                <StatePill skill={skill} language={language} />
               </span>
               <span className="agent-list">
                 {skill.installations.slice(0, 4).map((installation) => (
-                  <AgentBadge key={installation.id} label={installation.agentLabel} status={installation.status} />
+                  <AgentBadge
+                    key={installation.id}
+                    label={installation.agentLabel}
+                    status={installation.status}
+                    language={language}
+                  />
                 ))}
                 {skill.installations.length > 4 && <em>+{skill.installations.length - 4}</em>}
               </span>
@@ -425,32 +569,37 @@ function SkillsView({
 
 function CompareView({
   inventory,
-  skills
+  skills,
+  language
 }: {
   inventory: InventorySnapshot;
   skills: SkillRecord[];
+  language: Language;
 }) {
+  const visibleAgents = inventory.agents.filter((agent) => agent.installed);
+  const matrixAgents = visibleAgents.length > 0 ? visibleAgents : inventory.agents;
+
   return (
     <div className="panel compare-panel">
       <div className="panel-title">
         <div>
-          <h1>Agent Coverage Matrix</h1>
-          <p>Installed, linked, broken, and missing states across known local Agents.</p>
+          <h1>{t(language, "compareTitle")}</h1>
+          <p>{t(language, "compareDescription")}</p>
         </div>
       </div>
       <div className="matrix">
-        <div className="matrix-row matrix-head" style={{ gridTemplateColumns: matrixColumns(inventory.agents.length) }}>
-          <span>Skill</span>
-          {inventory.agents.map((agent) => (
+        <div className="matrix-row matrix-head" style={{ gridTemplateColumns: matrixColumns(matrixAgents.length) }}>
+          <span>{t(language, "tableSkill")}</span>
+          {matrixAgents.map((agent) => (
             <span key={agent.id}>{agent.label}</span>
           ))}
         </div>
         {skills.map((skill) => (
-          <div className="matrix-row" key={skill.id} style={{ gridTemplateColumns: matrixColumns(inventory.agents.length) }}>
+          <div className="matrix-row" key={skill.id} style={{ gridTemplateColumns: matrixColumns(matrixAgents.length) }}>
             <strong>{skill.displayName}</strong>
-            {inventory.agents.map((agent) => {
+            {matrixAgents.map((agent) => {
               const installation = skill.installations.find((item) => item.agentId === agent.id);
-              return <MatrixCell key={agent.id} installation={installation} />;
+              return <MatrixCell key={agent.id} installation={installation} language={language} />;
             })}
           </div>
         ))}
@@ -463,19 +612,21 @@ function PreviewView({
   plan,
   applyResult,
   busy,
-  onApply
+  onApply,
+  language
 }: {
   plan: SyncPlan | null;
   applyResult: ApplyResult | null;
   busy: boolean;
   onApply: () => void;
+  language: Language;
 }) {
   if (!plan) {
     return (
       <div className="empty-state">
         <ShieldCheck size={34} />
-        <h1>No sync plan yet</h1>
-        <p>Select a skill, then preview import or sync before anything is written.</p>
+        <h1>{t(language, "noPlanTitle")}</h1>
+        <p>{t(language, "noPlanDescription")}</p>
       </div>
     );
   }
@@ -486,12 +637,12 @@ function PreviewView({
     <div className="panel">
       <div className="panel-title">
         <div>
-          <h1>{plan.kind === "adopt" ? "Import Preview" : "Sync Preview"}</h1>
-          <p>{plan.planId} · {plan.riskLevel}</p>
+          <h1>{plan.kind === "adopt" ? t(language, "importPreview") : t(language, "syncPreview")}</h1>
+          <p>{plan.planId} · {riskLabel(language, plan.riskLevel)}</p>
         </div>
         <button className="primary-button" disabled={blocked || busy} onClick={onApply}>
           <CopyCheck size={17} />
-          Apply Plan
+          {t(language, "applyPlan")}
         </button>
       </div>
 
@@ -516,10 +667,10 @@ function PreviewView({
             <StatusIcon status={operation.status} />
             <div>
               <strong>{operation.message}</strong>
-              <small>{operation.opType}</small>
-              {operation.sourcePath && <code>from {operation.sourcePath}</code>}
-              {operation.targetPath && <code>to {operation.targetPath}</code>}
-              {operation.backupPath && <code>backup {operation.backupPath}</code>}
+              <small>{opTypeLabel(language, operation.opType)}</small>
+              {operation.sourcePath && <code>{t(language, "from")} {operation.sourcePath}</code>}
+              {operation.targetPath && <code>{t(language, "to")} {operation.targetPath}</code>}
+              {operation.backupPath && <code>{t(language, "backup")} {operation.backupPath}</code>}
             </div>
           </div>
         ))}
@@ -527,9 +678,9 @@ function PreviewView({
 
       {applyResult && (
         <div className={`apply-result ${applyResult.errors.length ? "error" : "success"}`}>
-          <strong>{applyResult.errors.length ? "Apply finished with errors" : "Apply completed"}</strong>
+          <strong>{applyResult.errors.length ? t(language, "applyErrorTitle") : t(language, "applySuccessTitle")}</strong>
           <span>
-            {applyResult.appliedOperations.length} applied · {applyResult.skippedOperations.length} skipped
+            {applyResult.appliedOperations.length} {t(language, "applied")} · {applyResult.skippedOperations.length} {t(language, "skipped")}
           </span>
           {applyResult.errors.map((item) => (
             <code key={item}>{item}</code>
@@ -546,7 +697,8 @@ function SettingsView({
   inventory,
   onChange,
   onSave,
-  onAddProjectFolder
+  onAddProjectFolder,
+  language
 }: {
   settings: Settings;
   activeSettings: Settings;
@@ -554,22 +706,38 @@ function SettingsView({
   onChange: (settings: Settings) => void;
   onSave: () => void;
   onAddProjectFolder: () => void;
+  language: Language;
 }) {
   return (
     <div className="panel settings-panel">
       <div className="panel-title">
         <div>
-          <h1>Settings</h1>
-          <p>Keep paths out of the way, but available when you need to audit them.</p>
+          <h1>{t(language, "settingsTitle")}</h1>
+          <p>{t(language, "settingsDescription")}</p>
         </div>
         <button className="primary-button" onClick={onSave}>
           <Check size={17} />
-          Save
+          {t(language, "save")}
         </button>
       </div>
 
       <label className="field">
-        <span>Central library</span>
+        <span>{t(language, "language")}</span>
+        <div className="segmented-control">
+          {LANGUAGES.map((item) => (
+            <button
+              key={item.code}
+              className={normalizeLanguage(settings.language) === item.code ? "active" : ""}
+              onClick={() => onChange({ ...settings, language: item.code })}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </label>
+
+      <label className="field">
+        <span>{t(language, "centralLibrary")}</span>
         <input
           value={settings.libraryPath}
           onChange={(event) => onChange({ ...settings, libraryPath: event.target.value })}
@@ -581,18 +749,18 @@ function SettingsView({
           checked={settings.showRawPaths}
           onChange={(event) => onChange({ ...settings, showRawPaths: event.target.checked })}
         />
-        <span>Show raw filesystem paths in skill detail</span>
+        <span>{t(language, "showRawPaths")}</span>
       </label>
 
       <section className="settings-section">
         <div className="section-heading">
-          <h2>Project folders</h2>
+          <h2>{t(language, "projectFolders")}</h2>
           <button className="secondary-button" onClick={onAddProjectFolder}>
             <FolderPlus size={16} />
-            Add
+            {t(language, "add")}
           </button>
         </div>
-        {settings.projectFolders.length === 0 && <p className="muted">No project folders added yet.</p>}
+        {settings.projectFolders.length === 0 && <p className="muted">{t(language, "noProjectFolders")}</p>}
         {settings.projectFolders.map((folder) => (
           <div className="path-row" key={folder}>
             <code>{folder}</code>
@@ -604,7 +772,7 @@ function SettingsView({
                   projectFolders: settings.projectFolders.filter((item) => item !== folder)
                 })
               }
-              title="Remove"
+              title={t(language, "remove")}
             >
               <XCircle size={16} />
             </button>
@@ -613,11 +781,11 @@ function SettingsView({
       </section>
 
       <section className="settings-section">
-        <h2>Scan roots</h2>
+        <h2>{t(language, "scanRoots")}</h2>
         <div className="roots-list">
           {inventory?.roots.map((root) => (
             <div className="root-row" key={`${root.agentId}-${root.scope}-${root.path}`}>
-              <AgentBadge label={root.agentLabel} status={root.orphaned ? "orphaned" : "active"} />
+              <AgentBadge label={root.agentLabel} status={root.orphaned ? "orphaned" : "active"} language={language} />
               <span>{root.scope}</span>
               <code>{root.path}</code>
             </div>
@@ -626,7 +794,7 @@ function SettingsView({
       </section>
 
       <section className="settings-section">
-        <h2>App data</h2>
+        <h2>{t(language, "appData")}</h2>
         <code>{inventory?.appDataPath || activeSettings.libraryPath}</code>
       </section>
     </div>
@@ -641,7 +809,8 @@ function SkillDetail({
   onTargetChange,
   onAdopt,
   onSync,
-  showRawPaths
+  showRawPaths,
+  language
 }: {
   skill: SkillRecord | null;
   content: SkillContent | null;
@@ -651,12 +820,13 @@ function SkillDetail({
   onAdopt: (skill: SkillRecord) => void;
   onSync: (skill: SkillRecord) => void;
   showRawPaths: boolean;
+  language: Language;
 }) {
   if (!skill) {
     return (
       <aside className="detail empty-detail">
         <FileText size={28} />
-        <span>Select a skill</span>
+        <span>{t(language, "selectSkill")}</span>
       </aside>
     );
   }
@@ -671,7 +841,7 @@ function SkillDetail({
           <h2>{skill.displayName}</h2>
           <span>{skill.slug}</span>
         </div>
-        <StatePill skill={skill} />
+        <StatePill skill={skill} language={language} />
       </div>
 
       <div className="action-row">
@@ -681,7 +851,7 @@ function SkillDetail({
           onClick={() => onAdopt(skill)}
         >
           <Library size={16} />
-          Import
+          {t(language, "import")}
         </button>
         <button
           className="primary-button"
@@ -689,16 +859,16 @@ function SkillDetail({
           onClick={() => onSync(skill)}
         >
           <Link2 size={16} />
-          Sync
+          {t(language, "sync")}
         </button>
       </div>
 
       <section className="detail-section">
-        <h3>Installed in</h3>
+        <h3>{t(language, "installedIn")}</h3>
         <div className="install-list">
           {skill.installations.map((installation) => (
             <div className="install-row" key={installation.id}>
-              <AgentBadge label={installation.agentLabel} status={installation.status} />
+              <AgentBadge label={installation.agentLabel} status={installation.status} language={language} />
               <span>{installation.scope}</span>
               {installation.isSymlink && <Link2 size={14} />}
               {installation.issues.length > 0 && <AlertTriangle size={14} />}
@@ -709,9 +879,9 @@ function SkillDetail({
       </section>
 
       <section className="detail-section">
-        <h3>Missing agents</h3>
+        <h3>{t(language, "missingAgents")}</h3>
         <div className="target-list">
-          {missing.length === 0 && <span className="muted">No missing Agents in the current scan.</span>}
+          {missing.length === 0 && <span className="muted">{t(language, "noMissingAgents")}</span>}
           {missing.slice(0, 12).map((agent) => (
             <label className="target-row" key={agent.id}>
               <input
@@ -722,13 +892,13 @@ function SkillDetail({
               <span>{agent.label}</span>
             </label>
           ))}
-          {missing.length > 12 && <span className="muted">+{missing.length - 12} more</span>}
+          {missing.length > 12 && <span className="muted">+{missing.length - 12} {t(language, "more")}</span>}
         </div>
       </section>
 
       <section className="detail-section">
-        <h3>Issues</h3>
-        <IssueList issues={skill.issues} />
+        <h3>{t(language, "issues")}</h3>
+        <IssueList issues={skill.issues} language={language} />
       </section>
 
       <section className="detail-section markdown-section">
@@ -739,7 +909,7 @@ function SkillDetail({
         {content ? (
           <ReactMarkdown>{content.markdownBody || content.content}</ReactMarkdown>
         ) : (
-          <span className="muted">No readable SKILL.md for this selection.</span>
+          <span className="muted">{t(language, "noReadableSkill")}</span>
         )}
       </section>
     </aside>
@@ -759,20 +929,29 @@ function Coverage({ skill }: { skill: SkillRecord }) {
   );
 }
 
-function StatePill({ skill }: { skill: SkillRecord }) {
-  if (skill.conflict) return <span className="pill warning">Conflict</span>;
-  if (skill.issues.length > 0) return <span className="pill danger">Needs review</span>;
-  if (skill.canonicalStatus === "imported") return <span className="pill success">Imported</span>;
-  return <span className="pill neutral">External</span>;
+function AgentStatusPill({ agent, language }: { agent: AgentRecord; language: Language }) {
+  const className = agent.status === "installed" ? "success" : agent.status === "residual" ? "warning" : "neutral";
+  return <span className={`pill ${className}`}>{agentStatusLabel(language, agent.status)}</span>;
 }
 
-function AgentBadge({ label, status }: { label: string; status: string }) {
-  return <span className={`agent-badge ${status}`}>{label}</span>;
+function StatePill({ skill, language }: { skill: SkillRecord; language: Language }) {
+  if (skill.conflict) return <span className="pill warning">{t(language, "stateConflict")}</span>;
+  if (skill.issues.length > 0) return <span className="pill danger">{t(language, "stateNeedsReview")}</span>;
+  if (skill.canonicalStatus === "imported") return <span className="pill success">{t(language, "stateImported")}</span>;
+  return <span className="pill neutral">{t(language, "stateExternal")}</span>;
 }
 
-function MatrixCell({ installation }: { installation?: SkillInstallation }) {
-  if (!installation) return <span className="matrix-cell missing">Missing</span>;
-  return <span className={`matrix-cell ${installation.status}`}>{installation.status}</span>;
+function AgentBadge({ label, status, language }: { label: string; status: string; language: Language }) {
+  return (
+    <span className={`agent-badge ${status}`} title={statusLabel(language, status)}>
+      {label}
+    </span>
+  );
+}
+
+function MatrixCell({ installation, language }: { installation?: SkillInstallation; language: Language }) {
+  if (!installation) return <span className="matrix-cell missing">{t(language, "statusMissing")}</span>;
+  return <span className={`matrix-cell ${installation.status}`}>{statusLabel(language, installation.status)}</span>;
 }
 
 function StatusIcon({ status }: { status: string }) {
@@ -781,14 +960,14 @@ function StatusIcon({ status }: { status: string }) {
   return <Wrench size={18} />;
 }
 
-function IssueList({ issues }: { issues: SkillIssue[] }) {
-  if (issues.length === 0) return <span className="muted">No issues found.</span>;
+function IssueList({ issues, language }: { issues: SkillIssue[]; language: Language }) {
+  if (issues.length === 0) return <span className="muted">{t(language, "noIssues")}</span>;
   return (
     <div className="issue-list">
       {issues.map((issue, index) => (
         <div className={`issue ${issue.severity}`} key={`${issue.code}-${index}`}>
           <AlertTriangle size={14} />
-          <span>{issue.message}</span>
+          <span>{issueLabel(language, issue.code, issue.message)}</span>
         </div>
       ))}
     </div>

@@ -8,6 +8,12 @@ pub struct Settings {
     pub project_folders: Vec<String>,
     pub custom_roots: Vec<CustomRoot>,
     pub show_raw_paths: bool,
+    #[serde(default = "default_language")]
+    pub language: String,
+}
+
+pub fn default_language() -> String {
+    "zh-CN".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -32,7 +38,38 @@ pub struct AgentDefinition {
     pub global_roots: Vec<String>,
     pub project_roots: Vec<String>,
     pub active_signals: Vec<String>,
+    pub cli_names: Vec<String>,
+    pub app_paths: Vec<String>,
+    pub priority: u16,
     pub symlink_support: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentDetectionSource {
+    pub kind: String,
+    pub label: String,
+    pub path: String,
+    pub exists: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRecord {
+    pub id: String,
+    pub label: String,
+    pub global_roots: Vec<String>,
+    pub project_roots: Vec<String>,
+    pub active_signals: Vec<String>,
+    pub cli_names: Vec<String>,
+    pub app_paths: Vec<String>,
+    pub symlink_support: bool,
+    pub priority: u16,
+    pub installed: bool,
+    pub status: String,
+    pub detection_sources: Vec<AgentDetectionSource>,
+    pub skill_roots: Vec<ResolvedRoot>,
+    pub skill_entry_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -105,7 +142,7 @@ pub struct SkillRecord {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct InventorySnapshot {
-    pub agents: Vec<AgentDefinition>,
+    pub agents: Vec<AgentRecord>,
     pub roots: Vec<ResolvedRoot>,
     pub skills: Vec<SkillRecord>,
     pub issues: Vec<SkillIssue>,

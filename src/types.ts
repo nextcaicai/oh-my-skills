@@ -3,6 +3,7 @@ export type Settings = {
   projectFolders: string[];
   customRoots: CustomRoot[];
   showRawPaths: boolean;
+  language: string;
 };
 
 export type CustomRoot = {
@@ -11,13 +12,28 @@ export type CustomRoot = {
   path: string;
 };
 
-export type AgentDefinition = {
+export type AgentDetectionSource = {
+  kind: string;
+  label: string;
+  path: string;
+  exists: boolean;
+};
+
+export type AgentRecord = {
   id: string;
   label: string;
   globalRoots: string[];
   projectRoots: string[];
   activeSignals: string[];
+  cliNames: string[];
+  appPaths: string[];
   symlinkSupport: boolean;
+  priority: number;
+  installed: boolean;
+  status: string;
+  detectionSources: AgentDetectionSource[];
+  skillRoots: ResolvedRoot[];
+  skillEntryCount: number;
 };
 
 export type ResolvedRoot = {
@@ -78,7 +94,7 @@ export type SkillRecord = {
 };
 
 export type InventorySnapshot = {
-  agents: AgentDefinition[];
+  agents: AgentRecord[];
   roots: ResolvedRoot[];
   skills: SkillRecord[];
   issues: SkillIssue[];

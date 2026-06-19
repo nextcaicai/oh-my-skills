@@ -3,7 +3,7 @@ use crate::models::{
     InventorySnapshot, ResolvedRoot, ScanOptions, SkillContent, SkillFrontmatter,
     SkillInstallation, SkillIssue, SkillRecord,
 };
-use crate::registry::{known_agents, resolve_roots};
+use crate::registry::{detect_agents, resolve_roots};
 use crate::settings::{app_data_dir, load_settings};
 use chrono::Utc;
 use std::collections::{BTreeMap, BTreeSet};
@@ -16,7 +16,7 @@ pub fn scan(app: &AppHandle, options: ScanOptions) -> Result<InventorySnapshot, 
     let app_data = app_data_dir(app)?;
     let library_path = PathBuf::from(&settings.library_path);
     let roots = resolve_roots(&settings, options.include_orphaned);
-    let agents = known_agents();
+    let agents = detect_agents(&settings, options.include_orphaned);
 
     let mut all_issues = Vec::new();
     let canonical = scan_canonical_library(&library_path, &mut all_issues)?;
@@ -66,7 +66,7 @@ pub fn scan(app: &AppHandle, options: ScanOptions) -> Result<InventorySnapshot, 
             .collect::<BTreeSet<_>>();
         let missing_agents = agents
             .iter()
-            .filter(|agent| !installed_agent_ids.contains(&agent.id))
+            .filter(|agent| agent.installed && !installed_agent_ids.contains(&agent.id))
             .map(|agent| agent.id.clone())
             .collect::<Vec<_>>();
 

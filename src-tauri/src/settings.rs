@@ -21,6 +21,7 @@ pub fn default_settings(app: &AppHandle) -> Result<Settings, String> {
         project_folders: Vec::new(),
         custom_roots: Vec::<CustomRoot>::new(),
         show_raw_paths: false,
+        language: "zh-CN".to_string(),
     })
 }
 
@@ -48,6 +49,9 @@ pub fn load_settings(app: &AppHandle) -> Result<Settings, String> {
 
     if settings.library_path.trim().is_empty() {
         settings.library_path = default.library_path;
+    }
+    if settings.language.trim().is_empty() {
+        settings.language = default.language;
     }
 
     Ok(settings)
