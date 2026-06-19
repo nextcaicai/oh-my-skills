@@ -947,6 +947,197 @@ p {
   animation: spin 0.9s linear infinite;
 }
 
+body.theme-light-preview {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(58, 177, 154, 0.28), transparent 33%),
+    radial-gradient(circle at 86% 8%, rgba(80, 132, 204, 0.22), transparent 30%),
+    linear-gradient(135deg, #f7fbff 0%, #edf8f2 48%, #e4ecf8 100%);
+}
+
+html.theme-light-preview {
+  background: #f7fbff;
+  color: #17202e;
+}
+
+body.theme-light-preview .app-shell {
+  color: #17202e;
+}
+
+body.theme-light-preview .logo-entry,
+body.theme-light-preview .tab-bar,
+body.theme-light-preview .icon-button,
+body.theme-light-preview .secondary-button,
+body.theme-light-preview .metric,
+body.theme-light-preview .agent-icon,
+body.theme-light-preview .detail-icon,
+body.theme-light-preview .filter-rail,
+body.theme-light-preview .skill-list-pane,
+body.theme-light-preview .detail-pane,
+body.theme-light-preview .queue-pane,
+body.theme-light-preview .plan-pane,
+body.theme-light-preview .settings-sheet {
+  border-color: rgba(30, 54, 83, 0.12);
+  background: rgba(255, 255, 255, 0.68);
+  color: #17202e;
+  box-shadow: 0 16px 48px rgba(55, 84, 116, 0.08);
+}
+
+body.theme-light-preview .intro-block {
+  border-color: rgba(30, 54, 83, 0.12);
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: 0 20px 60px rgba(55, 84, 116, 0.10);
+}
+
+body.theme-light-preview .logo-mark,
+body.theme-light-preview .tab-button.active,
+body.theme-light-preview .primary-button,
+body.theme-light-preview .segmented button.active,
+body.theme-light-preview .select-dot.checked {
+  background: #123b5c;
+  color: #f8fcff;
+}
+
+body.theme-light-preview .tab-button,
+body.theme-light-preview .icon-button,
+body.theme-light-preview .secondary-button,
+body.theme-light-preview .filter-rail button,
+body.theme-light-preview .searchbox,
+body.theme-light-preview .segmented,
+body.theme-light-preview .select-dot,
+body.theme-light-preview .field input,
+body.theme-light-preview .field select,
+body.theme-light-preview .info-block,
+body.theme-light-preview .install-row,
+body.theme-light-preview .queued-skill,
+body.theme-light-preview .operation,
+body.theme-light-preview .path-row,
+body.theme-light-preview .path-code {
+  background: rgba(21, 58, 91, 0.07);
+  color: rgba(23, 32, 46, 0.72);
+}
+
+body.theme-light-preview .tab-button:hover,
+body.theme-light-preview .agent-card:hover,
+body.theme-light-preview .skill-row.active,
+body.theme-light-preview .skill-row:hover,
+body.theme-light-preview .filter-rail button.active,
+body.theme-light-preview .filter-rail button:hover {
+  background: rgba(25, 111, 145, 0.12);
+  color: #123b5c;
+}
+
+body.theme-light-preview .logo-mark,
+body.theme-light-preview .agent-icon,
+body.theme-light-preview .agent-icon.installed,
+body.theme-light-preview .detail-icon {
+  border: 1px solid rgba(30, 54, 83, 0.10);
+  background: #ffffff;
+  color: #123b5c;
+  box-shadow: 0 10px 28px rgba(42, 71, 102, 0.10);
+}
+
+body.theme-light-preview .agent-card,
+body.theme-light-preview .skill-row-main,
+body.theme-light-preview .searchbox input,
+body.theme-light-preview .field input,
+body.theme-light-preview .field select {
+  color: #17202e;
+}
+
+body.theme-light-preview .intro-block p:not(.eyebrow),
+body.theme-light-preview .pane-title p,
+body.theme-light-preview .metric span,
+body.theme-light-preview .toolbar-row,
+body.theme-light-preview .agent-main small,
+body.theme-light-preview .agent-count small,
+body.theme-light-preview .rail-title,
+body.theme-light-preview .filter-rail strong,
+body.theme-light-preview .skill-row-main span,
+body.theme-light-preview .coverage em,
+body.theme-light-preview .detail-title p,
+body.theme-light-preview .muted,
+body.theme-light-preview .info-block span,
+body.theme-light-preview .detail-section h3,
+body.theme-light-preview .section-heading h2,
+body.theme-light-preview .install-row span:nth-child(2),
+body.theme-light-preview .field,
+body.theme-light-preview .operation small,
+body.theme-light-preview .empty-list,
+body.theme-light-preview .empty-detail {
+  color: rgba(23, 32, 46, 0.58);
+}
+
+body.theme-light-preview .empty-list strong,
+body.theme-light-preview .empty-detail strong,
+body.theme-light-preview .filter-rail button.active,
+body.theme-light-preview .filter-rail button:hover {
+  color: #17202e;
+}
+
+body.theme-light-preview .eyebrow {
+  color: #127568;
+}
+
+body.theme-light-preview .orbital-asset {
+  background:
+    linear-gradient(145deg, #44c0a5, #3179bd 52%, #153b60 100%);
+  color: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 24px 64px rgba(33, 87, 116, 0.25);
+}
+
+body.theme-light-preview .pane-header {
+  border-bottom-color: rgba(30, 54, 83, 0.10);
+}
+
+body.theme-light-preview .status-pill.installed,
+body.theme-light-preview .agent-badge.linked,
+body.theme-light-preview .agent-badge.active,
+body.theme-light-preview .apply-result.success {
+  background: rgba(35, 139, 105, 0.14);
+  color: #116149;
+}
+
+body.theme-light-preview .status-pill.residual,
+body.theme-light-preview .agent-badge.external-link,
+body.theme-light-preview .agent-badge.orphaned,
+body.theme-light-preview .secondary-button.selected,
+body.theme-light-preview .banner.warning {
+  background: rgba(206, 132, 39, 0.14);
+  color: #8a4b00;
+}
+
+body.theme-light-preview .status-pill.not-installed,
+body.theme-light-preview .agent-badge.installed {
+  background: rgba(21, 58, 91, 0.08);
+  color: rgba(23, 32, 46, 0.64);
+}
+
+body.theme-light-preview .status-pill.invalid,
+body.theme-light-preview .agent-badge.broken,
+body.theme-light-preview .banner.error,
+body.theme-light-preview .apply-result.error {
+  background: rgba(190, 62, 49, 0.13);
+  color: #9d2d24;
+}
+
+body.theme-light-preview .coverage {
+  background: rgba(21, 58, 91, 0.12);
+}
+
+body.theme-light-preview .coverage i {
+  background: #2b8fcb;
+}
+
+body.theme-light-preview code,
+body.theme-light-preview .markdown-preview {
+  background: rgba(255, 255, 255, 0.58);
+  color: #355066;
+}
+
+body.theme-light-preview .sheet-backdrop {
+  background: rgba(15, 32, 52, 0.20);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

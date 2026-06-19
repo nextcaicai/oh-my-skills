@@ -67,6 +67,15 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
+    document.documentElement.classList.add("theme-light-preview");
+    document.body.classList.add("theme-light-preview");
+    return () => {
+      document.documentElement.classList.remove("theme-light-preview");
+      document.body.classList.remove("theme-light-preview");
+    };
+  }, []);
+
+  useEffect(() => {
     void boot();
   }, []);
 
