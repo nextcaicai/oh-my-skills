@@ -56,7 +56,6 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [agentFilter, setAgentFilter] = useState("all");
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
-  const [includeOrphaned, setIncludeOrphaned] = useState(false);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(new Set());
   const [skillContent, setSkillContent] = useState<SkillContent | null>(null);
@@ -149,7 +148,7 @@ export default function App() {
       const loaded = await invoke<AppSettings>("get_settings");
       setSettings(loaded);
       setDraftSettings(loaded);
-      await refreshInventory(false);
+      await refreshInventory();
     } catch (reason) {
       setError(String(reason));
     } finally {
@@ -157,12 +156,12 @@ export default function App() {
     }
   }
 
-  async function refreshInventory(orphaned = includeOrphaned) {
+  async function refreshInventory() {
     setBusy("扫描本机 Agent 与 Skills");
     setError(null);
     try {
       const next = await invoke<InventorySnapshot>("scan_inventory", {
-        options: { includeOrphaned: orphaned }
+        options: { includeOrphaned: false }
       });
       setInventory(next);
       setSelectedSkillId((current) => {
@@ -408,11 +407,6 @@ export default function App() {
             skills={allSkills}
             installedCount={installedAgents.length}
             busy={busy}
-            includeOrphaned={includeOrphaned}
-            onIncludeOrphaned={(value) => {
-              setIncludeOrphaned(value);
-              void refreshInventory(value);
-            }}
             onAgentClick={openAgentSkills}
           />
         )}
@@ -506,63 +500,39 @@ function AgentsView({
   skills,
   installedCount,
   busy,
-  includeOrphaned,
-  onIncludeOrphaned,
   onAgentClick
 }: {
   agents: AgentRecord[];
   skills: SkillRecord[];
   installedCount: number;
   busy: string;
-  includeOrphaned: boolean;
-  onIncludeOrphaned: (value: boolean) => void;
   onAgentClick: (agent: AgentRecord) => void;
 }) {
   return (
     <div className="agents-page">
-      <section className="intro-block">
-        <div className="orbital-asset" aria-hidden="true">
-          <Globe2 size={98} />
-        </div>
-        <div>
-          <p className="eyebrow">LOCAL AGENT SCAN</p>
-          <h1>发现这台 Mac 上的 Agent 与 Skills</h1>
-          <p>先确认 AMP、Claude Code、Codex、Cursor、Gemini CLI、Windsurf 等 Agent 是否存在，再进入对应 Skills 清单。</p>
-        </div>
-        <div className="intro-stats">
-          <Metric label="已安装 Agent" value={`${installedCount}/${agents.length}`} />
-          <Metric label="Skills" value={String(skills.length)} />
-        </div>
-      </section>
-
       <div className="toolbar-row">
-        <span>{busy || "扫描结果已就绪"}</span>
-        <label className="switch-row">
-          <input
-            type="checkbox"
-            checked={includeOrphaned}
-            onChange={(event) => onIncludeOrphaned(event.target.checked)}
-          />
-          包含孤儿目录
-        </label>
+        <span>{busy || `已发现 Agent ${installedCount} 个 · Skills ${skills.length} 个`}</span>
       </div>
 
       <section className="agent-list">
-        {agents.map((agent) => (
-          <button className="agent-card" key={agent.id} onClick={() => onAgentClick(agent)}>
-            <AgentIcon agent={agent} />
-            <span className="agent-main">
-              <strong>{agent.label}</strong>
-              <small>{agentSignalSummary(agent)}</small>
-            </span>
-            <span className="agent-count">
-              <strong>{agentSkillCount(agent.id, skills)}</strong>
-              <small>Skills</small>
-            </span>
-            <StatusPill status={agent.status} />
-            <ChevronRight size={18} />
-          </button>
-        ))}
+        {agents.map((agent) => {
+          const signalSummary = agentSignalSummary(agent);
+          return (
+            <button className="agent-card" key={agent.id} onClick={() => onAgentClick(agent)}>
+              <AgentIcon agent={agent} />
+              <span className="agent-main">
+                <strong>{agent.label}</strong>
+                {signalSummary && <small>{signalSummary}</small>}
+              </span>
+              <span className="agent-count">
+                <strong>{agentSkillCount(agent.id, skills)}</strong>
+                <small>Skills</small>
+              </span>
+              <StatusPill status={agent.status} />
+              <ChevronRight size={18} />
+            </button>
+          );
+        })}
       </section>
     </div>
   );
@@ -1026,15 +996,6 @@ function SettingsSheet({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="metric">
-      <strong>{value}</strong>
-      <span>{label}</span>
-    </div>
-  );
-}
-
 function AgentIcon({ agent }: { agent: AgentRecord }) {
   const icon = agentIconAsset(agent.id);
   const fallback = agent.label.slice(0, 2).toUpperCase();
@@ -1115,15 +1076,14 @@ function agentSkillCount(agentId: string, skills: SkillRecord[]) {
 }
 
 function agentSignalSummary(agent: AgentRecord) {
-  if (agent.detectionSources.length === 0) return "没有检测信号";
-  const kinds = Array.from(new Set(agent.detectionSources.map((source) => source.kind)));
-  return kinds.map((kind) => {
-    if (kind === "cli") return "CLI";
-    if (kind === "app") return "App";
-    if (kind === "extension") return "扩展";
-    if (kind === "plugin-installed") return "插件";
-    return "配置";
-  }).join(" · ");
+  const labels = agent.detectionSources.flatMap((source) => {
+    if (source.kind === "cli") return ["CLI"];
+    if (source.kind === "app") return ["App"];
+    if (source.kind === "extension") return ["扩展"];
+    if (source.kind === "plugin-installed") return ["插件"];
+    return [];
+  });
+  return Array.from(new Set(labels)).join(" · ");
 }
 
 const demoAgents: AgentRecord[] = [
