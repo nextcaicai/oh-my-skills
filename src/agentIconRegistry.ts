@@ -30,6 +30,7 @@ const iconFiles: Record<string, AgentIconAsset> = {
   trae_cn: { src: new URL("../agent-icons/trae-color.svg", import.meta.url).href },
   warp: { src: new URL("../agent-icons/warp-logo-dark.svg", import.meta.url).href, size: 44 },
   windsurf: { src: new URL("../agent-icons/windsurf.svg", import.meta.url).href },
+  workbuddy: { src: new URL("../agent-icons/wodebuddy.svg", import.meta.url).href },
   zed: { src: new URL("../agent-icons/zed-logo.svg", import.meta.url).href }
 };
 

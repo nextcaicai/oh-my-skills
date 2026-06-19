@@ -39,6 +39,7 @@ import type {
 
 type View = "agents" | "skills" | "sync";
 type ScopeFilter = "all" | "global" | "project";
+type AgentViewFilter = "all" | "installed";
 
 const defaultSettings: AppSettings = {
   libraryPath: "",
@@ -508,17 +509,49 @@ function AgentsView({
   busy: string;
   onAgentClick: (agent: AgentRecord) => void;
 }) {
+  const [agentViewFilter, setAgentViewFilter] = useState<AgentViewFilter>("all");
+  const visibleAgents = agentViewFilter === "installed" ? agents.filter((agent) => agent.installed) : agents;
+  const summary = agentViewFilter === "all"
+    ? `内置 ${agents.length} 个 Agent 的自动检测识别`
+    : busy || `已发现 Agent ${installedCount} 个 · Skills ${skills.length} 个`;
+
   return (
     <div className="agents-page">
+      <div className="agent-filter-tabs" role="tablist" aria-label="Agent 过滤">
+        <button
+          className={agentViewFilter === "all" ? "active" : ""}
+          type="button"
+          role="tab"
+          aria-selected={agentViewFilter === "all"}
+          onClick={() => setAgentViewFilter("all")}
+        >
+          全部
+        </button>
+        <button
+          className={agentViewFilter === "installed" ? "active" : ""}
+          type="button"
+          role="tab"
+          aria-selected={agentViewFilter === "installed"}
+          onClick={() => setAgentViewFilter("installed")}
+        >
+          已安装
+        </button>
+      </div>
       <div className="toolbar-row">
-        <span>{busy || `已发现 Agent ${installedCount} 个 · Skills ${skills.length} 个`}</span>
+        <span>{summary}</span>
       </div>
 
       <section className="agent-list">
-        {agents.map((agent) => {
+        {visibleAgents.map((agent) => {
           const signalSummary = agentSignalSummary(agent);
+          const disabled = agentViewFilter === "all" && !agent.installed;
           return (
-            <button className="agent-card" key={agent.id} onClick={() => onAgentClick(agent)}>
+            <button
+              className={`agent-card ${disabled ? "disabled" : ""}`}
+              disabled={disabled}
+              key={agent.id}
+              onClick={() => onAgentClick(agent)}
+            >
               <AgentIcon agent={agent} />
               <span className="agent-main">
                 <strong>{agent.label}</strong>
@@ -1095,7 +1128,6 @@ const demoAgents: AgentRecord[] = [
   demoAgent("codebuddy", "CodeBuddy", "not-installed", 0, []),
   demoAgent("codex", "Codex", "installed", 12, ["cli", "plugin-installed"]),
   demoAgent("cursor", "Cursor", "installed", 4, ["app"]),
-  demoAgent("droid", "Droid", "not-installed", 0, []),
   demoAgent("gemini-cli", "Gemini CLI", "installed", 2, ["cli"]),
   demoAgent("github-copilot", "GitHub Copilot", "not-installed", 1, ["config"]),
   demoAgent("grok-cli", "Grok CLI", "not-installed", 0, []),

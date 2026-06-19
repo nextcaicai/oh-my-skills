@@ -96,16 +96,6 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             7,
         ),
         agent(
-            "droid",
-            "Droid",
-            &["~/.droid/skills"],
-            &[".droid/skills"],
-            &["~/.droid"],
-            &["droid"],
-            &["/Applications/Droid.app", "~/Applications/Droid.app"],
-            8,
-        ),
-        agent(
             "gemini-cli",
             "Gemini CLI",
             &["~/.gemini/skills"],
@@ -138,9 +128,9 @@ pub fn known_agents() -> Vec<AgentDefinition> {
         agent(
             "hermes",
             "Hermes",
-            &["~/.hermes/skills"],
+            &["~/.hermes/skills/"],
             &[],
-            &["~/.hermes"],
+            &["~/.hermes", "~/.hermes/skills/"],
             &["hermes"],
             &["/Applications/Hermes.app", "~/Applications/Hermes.app"],
             12,
@@ -188,9 +178,9 @@ pub fn known_agents() -> Vec<AgentDefinition> {
         agent(
             "openclaw",
             "OpenClaw",
-            &["~/.openclaw/skills"],
+            &["~/.openclaw/skills/"],
             &["skills", ".agents/skills"],
-            &["~/.openclaw"],
+            &["~/.openclaw", "~/.openclaw/skills/"],
             &["openclaw"],
             &["/Applications/OpenClaw.app", "~/Applications/OpenClaw.app"],
             18,
@@ -584,13 +574,12 @@ fn detect_install_sources(definition: &AgentDefinition) -> Vec<AgentDetectionSou
     for signal in &definition.active_signals {
         let path = expand_home(signal);
         if path.exists() {
-            push_source(
-                &mut sources,
-                &mut seen,
-                "config",
-                signal,
-                path_to_string(&path),
-            );
+            let kind = if is_agent_skills_root_signal(definition, signal, &path) {
+                "skills-root"
+            } else {
+                "config"
+            };
+            push_source(&mut sources, &mut seen, kind, signal, path_to_string(&path));
         }
     }
 
@@ -611,9 +600,15 @@ fn has_install_evidence(sources: &[AgentDetectionSource]) -> bool {
     sources.iter().any(|source| {
         matches!(
             source.kind.as_str(),
-            "cli" | "app" | "extension" | "plugin-installed"
+            "cli" | "app" | "extension" | "plugin-installed" | "skills-root"
         )
     })
+}
+
+fn is_agent_skills_root_signal(definition: &AgentDefinition, signal: &str, path: &Path) -> bool {
+    matches!(definition.id.as_str(), "hermes" | "openclaw")
+        && signal.trim_end_matches('/').ends_with("/skills")
+        && path.is_dir()
 }
 
 fn push_source(
@@ -987,7 +982,7 @@ mod tests {
     fn known_agents_include_all_default_tools() {
         let agents = known_agents();
         let labels: Vec<String> = agents.iter().map(|agent| agent.label.clone()).collect();
-        assert_eq!(agents.len(), 28);
+        assert_eq!(agents.len(), 27);
         assert!(labels.contains(&"AMP".to_string()));
         assert!(labels.contains(&"Antigravity".to_string()));
         assert!(labels.contains(&"Augment".to_string()));
@@ -996,7 +991,6 @@ mod tests {
         assert!(labels.contains(&"CodeBuddy".to_string()));
         assert!(labels.contains(&"Codex".to_string()));
         assert!(labels.contains(&"Cursor".to_string()));
-        assert!(labels.contains(&"Droid".to_string()));
         assert!(labels.contains(&"Gemini CLI".to_string()));
         assert!(labels.contains(&"GitHub Copilot".to_string()));
         assert!(labels.contains(&"Grok CLI".to_string()));
@@ -1049,6 +1043,33 @@ mod tests {
         }];
 
         assert!(has_install_evidence(&sources));
+    }
+
+    #[test]
+    fn hermes_and_openclaw_skills_roots_are_install_evidence() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        for (id, signal) in [
+            ("hermes", "~/.hermes/skills/"),
+            ("openclaw", "~/.openclaw/skills/"),
+        ] {
+            let agent = known_agents()
+                .into_iter()
+                .find(|agent| agent.id == id)
+                .expect("agent");
+            let kind = if is_agent_skills_root_signal(&agent, signal, temp.path()) {
+                "skills-root"
+            } else {
+                "config"
+            };
+            let sources = vec![AgentDetectionSource {
+                kind: kind.to_string(),
+                label: signal.to_string(),
+                path: path_to_string(temp.path()),
+                exists: true,
+            }];
+
+            assert!(has_install_evidence(&sources));
+        }
     }
 
     #[test]

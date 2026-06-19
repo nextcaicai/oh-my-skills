@@ -216,8 +216,34 @@ p {
 
 .agents-page {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 12px;
+}
+
+.agent-filter-tabs {
+  display: inline-flex;
+  width: max-content;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.agent-filter-tabs button {
+  min-width: 82px;
+  min-height: 34px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(248, 240, 230, 0.58);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.agent-filter-tabs button.active {
+  background: rgba(211, 151, 91, 0.22);
+  color: #ffd7a9;
 }
 
 .pane-title h1 {
@@ -267,6 +293,15 @@ p {
 
 .agent-card:hover {
   background: rgba(255, 255, 255, 0.07);
+}
+
+.agent-card.disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.agent-card.disabled:hover {
+  background: transparent;
 }
 
 .agent-icon,
@@ -903,6 +938,7 @@ body.theme-light-preview .app-shell {
 
 body.theme-light-preview .logo-entry,
 body.theme-light-preview .tab-bar,
+body.theme-light-preview .agent-filter-tabs,
 body.theme-light-preview .icon-button,
 body.theme-light-preview .secondary-button,
 body.theme-light-preview .agent-icon,
@@ -921,6 +957,7 @@ body.theme-light-preview .settings-sheet {
 
 body.theme-light-preview .logo-mark,
 body.theme-light-preview .tab-button.active,
+body.theme-light-preview .agent-filter-tabs button.active,
 body.theme-light-preview .primary-button,
 body.theme-light-preview .segmented button.active,
 body.theme-light-preview .select-dot.checked {
@@ -929,6 +966,7 @@ body.theme-light-preview .select-dot.checked {
 }
 
 body.theme-light-preview .tab-button,
+body.theme-light-preview .agent-filter-tabs button,
 body.theme-light-preview .icon-button,
 body.theme-light-preview .secondary-button,
 body.theme-light-preview .filter-rail button,
