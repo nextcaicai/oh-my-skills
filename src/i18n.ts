@@ -37,6 +37,7 @@ const zh = {
   cliSignal: "CLI",
   appSignal: "App",
   extensionSignal: "扩展",
+  pluginInstalledSignal: "已安装插件",
   configSignal: "配置",
   libraryNotInitialized: "中心库尚未初始化",
   tableSkill: "Skill",
@@ -98,6 +99,7 @@ const zh = {
   kindSync: "同步",
   statusMissing: "缺失",
   statusInstalled: "已安装",
+  statusPluginInstalled: "插件提供",
   statusLinked: "已链接",
   statusExternalLink: "外部链接",
   statusBroken: "断链",
@@ -153,6 +155,7 @@ const en: Record<keyof typeof zh, string> = {
   cliSignal: "CLI",
   appSignal: "App",
   extensionSignal: "Extension",
+  pluginInstalledSignal: "Installed plugin",
   configSignal: "Config",
   libraryNotInitialized: "Library not initialized",
   tableSkill: "Skill",
@@ -214,6 +217,7 @@ const en: Record<keyof typeof zh, string> = {
   kindSync: "Sync",
   statusMissing: "Missing",
   statusInstalled: "installed",
+  statusPluginInstalled: "plugin installed",
   statusLinked: "linked",
   statusExternalLink: "external link",
   statusBroken: "broken",
@@ -256,6 +260,7 @@ export function statusLabel(language: Language, status: string): string {
   const map: Record<string, TranslationKey> = {
     missing: "statusMissing",
     installed: "statusInstalled",
+    "plugin-installed": "statusPluginInstalled",
     linked: "statusLinked",
     "external-link": "statusExternalLink",
     broken: "statusBroken",
@@ -286,6 +291,7 @@ export function detectionKindLabel(language: Language, kind: string): string {
     cli: "cliSignal",
     app: "appSignal",
     extension: "extensionSignal",
+    "plugin-installed": "pluginInstalledSignal",
     config: "configSignal"
   };
   const key = map[kind];

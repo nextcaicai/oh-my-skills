@@ -2,6 +2,7 @@ use crate::fs_ops::{expand_home, path_to_string};
 use crate::models::{
     AgentDefinition, AgentDetectionSource, AgentRecord, CustomRoot, ResolvedRoot, Settings,
 };
+use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -67,12 +68,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
         agent(
             "codex",
             "Codex",
-            &[
-                "~/.codex/skills",
-                "~/.codex/skills/.system",
-                "~/.skills-manager/skills",
-                "~/.agents/skills",
-            ],
+            &["~/.codex/skills", "~/.agents/skills"],
             &[".agents/skills"],
             &["~/.codex"],
             &["codex"],
@@ -361,12 +357,11 @@ fn resolve_roots_for_definitions(
             .map(|sources| has_install_evidence(sources))
             .unwrap_or(false);
 
-        for root in discovered_skill_roots_for_agent(&definition.id) {
-            let scope = discovered_root_scope(&root);
+        for root in installed_plugin_skill_roots_for_agent(&definition.id) {
             push_root(
                 &mut roots,
                 definition,
-                scope,
+                "plugin",
                 root,
                 installed,
                 include_orphaned,
@@ -390,14 +385,14 @@ fn push_root(
     scope: &str,
     path: PathBuf,
     installed: bool,
-    include_orphaned: bool,
+    _include_orphaned: bool,
     include_missing_installed_root: bool,
 ) {
     let exists = path.exists();
     let active = installed && exists;
     let orphaned = exists && !installed;
 
-    if active || (orphaned && include_orphaned) || (installed && include_missing_installed_root) {
+    if active || (installed && include_missing_installed_root) {
         roots.push(ResolvedRoot {
             agent_id: definition.id.clone(),
             agent_label: definition.label.clone(),
@@ -495,12 +490,12 @@ fn detect_install_sources(definition: &AgentDefinition) -> Vec<AgentDetectionSou
         }
     }
 
-    for root in discovered_skill_roots_for_agent(&definition.id) {
+    for root in installed_plugin_skill_roots_for_agent(&definition.id) {
         push_source(
             &mut sources,
             &mut seen,
-            "plugin-cache",
-            "installed skills",
+            "plugin-installed",
+            "installed plugin skills",
             path_to_string(&root),
         );
     }
@@ -512,7 +507,7 @@ fn has_install_evidence(sources: &[AgentDetectionSource]) -> bool {
     sources.iter().any(|source| {
         matches!(
             source.kind.as_str(),
-            "cli" | "app" | "extension" | "plugin-cache"
+            "cli" | "app" | "extension" | "plugin-installed"
         )
     })
 }
@@ -708,30 +703,16 @@ fn extension_search_roots() -> Vec<PathBuf> {
     roots
 }
 
-fn discovered_skill_roots_for_agent(agent_id: &str) -> Vec<PathBuf> {
+fn installed_plugin_skill_roots_for_agent(agent_id: &str) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     let mut seen = BTreeSet::new();
 
     match agent_id {
         "claude-code" => {
-            discover_plugin_skill_roots(
-                &mut roots,
-                &mut seen,
-                &expand_home("~/.claude/plugins/cache"),
-            );
+            collect_claude_installed_plugin_skill_roots(&mut roots, &mut seen);
         }
         "codex" => {
-            for root in [
-                "~/.codex/vendor_imports/skills/skills/.curated",
-                "~/.codex/vendor_imports/skills/skills/.system",
-            ] {
-                push_existing_skill_collection_root(&mut roots, &mut seen, expand_home(root));
-            }
-            discover_plugin_skill_roots(
-                &mut roots,
-                &mut seen,
-                &expand_home("~/.codex/plugins/cache"),
-            );
+            collect_codex_enabled_plugin_skill_roots(&mut roots, &mut seen);
         }
         _ => {}
     }
@@ -739,33 +720,87 @@ fn discovered_skill_roots_for_agent(agent_id: &str) -> Vec<PathBuf> {
     roots
 }
 
-fn discovered_root_scope(path: &Path) -> &'static str {
-    let value = path_to_string(path);
-    if value.contains("/plugins/cache/") {
-        "plugin"
-    } else if value.contains("/vendor_imports/") {
-        "vendor"
-    } else {
-        "global"
+fn collect_claude_installed_plugin_skill_roots(
+    roots: &mut Vec<PathBuf>,
+    seen: &mut BTreeSet<String>,
+) {
+    let path = expand_home("~/.claude/plugins/installed_plugins.json");
+    let Ok(text) = fs::read_to_string(&path) else {
+        return;
+    };
+    let Ok(value) = serde_json::from_str::<Value>(&text) else {
+        return;
+    };
+    let Some(plugins) = value.get("plugins").and_then(Value::as_object) else {
+        return;
+    };
+
+    for installs in plugins.values().filter_map(Value::as_array) {
+        for install in installs {
+            let Some(install_path) = install.get("installPath").and_then(Value::as_str) else {
+                continue;
+            };
+            push_existing_skill_collection_root(
+                roots,
+                seen,
+                expand_home(install_path).join("skills"),
+            );
+        }
     }
 }
 
-fn discover_plugin_skill_roots(
-    roots: &mut Vec<PathBuf>,
-    seen: &mut BTreeSet<String>,
-    cache_root: &Path,
-) {
-    if !cache_root.exists() {
+fn collect_codex_enabled_plugin_skill_roots(roots: &mut Vec<PathBuf>, seen: &mut BTreeSet<String>) {
+    let config = expand_home("~/.codex/config.toml");
+    let Ok(text) = fs::read_to_string(&config) else {
         return;
-    }
+    };
 
-    for namespace in read_dir_paths(cache_root) {
-        for plugin in read_dir_paths(&namespace) {
-            for version in read_dir_paths(&plugin) {
-                push_existing_skill_collection_root(roots, seen, version.join("skills"));
+    for plugin_key in parse_enabled_codex_plugins(&text) {
+        let Some((plugin, marketplace)) = plugin_key.split_once('@') else {
+            continue;
+        };
+        let plugin_root = expand_home("~/.codex/plugins/cache")
+            .join(marketplace)
+            .join(plugin);
+
+        push_existing_skill_collection_root(roots, seen, plugin_root.join("skills"));
+        for version in read_dir_paths(&plugin_root) {
+            push_existing_skill_collection_root(roots, seen, version.join("skills"));
+        }
+    }
+}
+
+fn parse_enabled_codex_plugins(text: &str) -> Vec<String> {
+    let mut enabled = Vec::new();
+    let mut current_plugin: Option<String> = None;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            current_plugin = parse_codex_plugin_table(trimmed);
+            continue;
+        }
+        if trimmed == "enabled = true" {
+            if let Some(plugin) = current_plugin.take() {
+                enabled.push(plugin);
             }
         }
     }
+
+    enabled
+}
+
+fn parse_codex_plugin_table(line: &str) -> Option<String> {
+    let rest = line.strip_prefix("[plugins.")?.strip_suffix(']')?;
+    let rest = rest.trim();
+    rest.strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .or_else(|| {
+            rest.strip_prefix('\'')
+                .and_then(|value| value.strip_suffix('\''))
+        })
+        .or_else(|| (!rest.is_empty()).then_some(rest))
+        .map(str::to_string)
 }
 
 fn push_existing_skill_collection_root(
@@ -910,6 +945,19 @@ mod tests {
     }
 
     #[test]
+    fn plugin_installed_source_is_install_evidence() {
+        let sources = vec![AgentDetectionSource {
+            kind: "plugin-installed".to_string(),
+            label: "installed plugin skills".to_string(),
+            path: "/Users/example/.codex/plugins/cache/openai/plugin/1.0.0/skills".to_string(),
+            exists: true,
+        }];
+
+        assert!(has_install_evidence(&sources));
+        assert!(!has_residual_evidence(&sources));
+    }
+
+    #[test]
     fn app_names_are_derived_from_explicit_app_paths() {
         let agent = known_agents()
             .into_iter()
@@ -928,27 +976,25 @@ mod tests {
     }
 
     #[test]
-    fn discovers_plugin_skill_collection_roots() {
-        let temp = tempfile::tempdir().expect("temp dir");
-        let skills = temp
-            .path()
-            .join("publisher")
-            .join("plugin")
-            .join("1.0.0")
-            .join("skills");
-        let skill = skills.join("example-skill");
-        fs::create_dir_all(&skill).expect("skill dir");
-        fs::write(
-            skill.join("SKILL.md"),
-            "---\nname: example-skill\ndescription: Example\n---\nBody",
-        )
-        .expect("skill md");
+    fn parses_enabled_codex_plugins_from_config() {
+        let config = r#"
+[plugins."documents@openai-primary-runtime"]
+enabled = true
 
-        let mut roots = Vec::new();
-        let mut seen = BTreeSet::new();
-        discover_plugin_skill_roots(&mut roots, &mut seen, temp.path());
+[plugins."disabled@openai-curated"]
+enabled = false
 
-        assert_eq!(roots, vec![skills]);
+[plugins.'hyperframes@openai-curated']
+enabled = true
+"#;
+
+        assert_eq!(
+            parse_enabled_codex_plugins(config),
+            vec![
+                "documents@openai-primary-runtime".to_string(),
+                "hyperframes@openai-curated".to_string()
+            ]
+        );
     }
 
     #[test]

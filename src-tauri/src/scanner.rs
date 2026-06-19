@@ -281,6 +281,8 @@ pub fn inspect_installation(
     let mut hash = None;
     let mut status = if is_symlink {
         "external-link"
+    } else if scope == "plugin" {
+        "plugin-installed"
     } else {
         "installed"
     }
@@ -527,6 +529,23 @@ mod tests {
             .issues
             .iter()
             .any(|issue| issue.code == "name-mismatch"));
+    }
+
+    #[test]
+    fn marks_plugin_installations_as_plugin_installed() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let skill = temp.path().join("plugin-skill");
+        fs::create_dir_all(&skill).expect("skill dir");
+        fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: plugin-skill\ndescription: Plugin skill\n---\nBody",
+        )
+        .expect("skill md");
+
+        let installation =
+            inspect_installation("test", "Test", "plugin", temp.path(), &skill, temp.path());
+
+        assert_eq!(installation.status, "plugin-installed");
     }
 
     #[test]

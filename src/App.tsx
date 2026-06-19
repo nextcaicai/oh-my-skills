@@ -502,8 +502,6 @@ function AgentsView({
   onIncludeOrphaned: (value: boolean) => void;
   onAgentClick: (agent: AgentRecord) => void;
 }) {
-  const totalEntries = agents.reduce((sum, agent) => sum + agent.skillEntryCount, 0);
-
   return (
     <div className="agents-page">
       <section className="intro-block">
@@ -518,7 +516,6 @@ function AgentsView({
         <div className="intro-stats">
           <Metric label="已安装 Agent" value={`${installedCount}/${agents.length}`} />
           <Metric label="Skills" value={String(skills.length)} />
-          <Metric label="入口" value={String(totalEntries)} />
         </div>
       </section>
 
@@ -543,7 +540,7 @@ function AgentsView({
               <small>{agentSignalSummary(agent)}</small>
             </span>
             <span className="agent-count">
-              <strong>{agent.skillEntryCount}</strong>
+              <strong>{agentSkillCount(agent.id, skills)}</strong>
               <small>Skills</small>
             </span>
             <StatusPill status={agent.status} />
@@ -603,7 +600,7 @@ function SkillsView({
         {agents.map((agent) => (
           <button className={agentFilter === agent.id ? "active" : ""} key={agent.id} onClick={() => onAgentFilter(agent.id)}>
             <span>{agent.label}</span>
-            <strong>{agent.skillEntryCount}</strong>
+            <strong>{agentSkillCount(agent.id, allSkills)}</strong>
           </button>
         ))}
       </aside>
@@ -1089,6 +1086,10 @@ function firstValidInstallation(skill: SkillRecord): SkillInstallation | null {
   return skill.installations.find((installation) => installation.status !== "invalid" && !installation.brokenSymlink) ?? null;
 }
 
+function agentSkillCount(agentId: string, skills: SkillRecord[]) {
+  return skills.filter((skill) => skill.installations.some((installation) => installation.agentId === agentId)).length;
+}
+
 function agentSignalSummary(agent: AgentRecord) {
   if (agent.detectionSources.length === 0) return "没有检测信号";
   const kinds = Array.from(new Set(agent.detectionSources.map((source) => source.kind)));
@@ -1096,7 +1097,7 @@ function agentSignalSummary(agent: AgentRecord) {
     if (kind === "cli") return "CLI";
     if (kind === "app") return "App";
     if (kind === "extension") return "扩展";
-    if (kind === "plugin-cache") return "Skills";
+    if (kind === "plugin-installed") return "插件";
     return "配置";
   }).join(" · ");
 }
@@ -1107,7 +1108,7 @@ const demoAgents: AgentRecord[] = [
   demoAgent("claude-code", "Claude Code", "installed", 8, ["cli", "config"]),
   demoAgent("cline", "Cline", "installed", 2, ["extension"]),
   demoAgent("codebuddy", "CodeBuddy", "not-installed", 0, []),
-  demoAgent("codex", "Codex", "installed", 12, ["cli", "plugin-cache"]),
+  demoAgent("codex", "Codex", "installed", 12, ["cli", "plugin-installed"]),
   demoAgent("cursor", "Cursor", "installed", 4, ["app"]),
   demoAgent("gemini-cli", "Gemini CLI", "installed", 2, ["cli"]),
   demoAgent("github-copilot", "GitHub Copilot", "residual", 1, ["config"]),
