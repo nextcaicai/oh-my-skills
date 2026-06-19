@@ -67,15 +67,6 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
-    document.documentElement.classList.add("theme-light-preview");
-    document.body.classList.add("theme-light-preview");
-    return () => {
-      document.documentElement.classList.remove("theme-light-preview");
-      document.body.classList.remove("theme-light-preview");
-    };
-  }, []);
-
-  useEffect(() => {
     void boot();
   }, []);
 
@@ -1039,7 +1030,7 @@ function SettingsSheet({
 function AgentIcon({ agent }: { agent: AgentRecord }) {
   const icon = agentIconAsset(agent.id);
   const fallback = agent.label.slice(0, 2).toUpperCase();
-  const iconStyle = icon ? ({ "--agent-icon-size": `${icon.size ?? 30}px` } as CSSProperties) : undefined;
+  const iconStyle = icon?.size ? ({ "--agent-icon-size": `${icon.size}px` } as CSSProperties) : undefined;
 
   return (
     <span className={`agent-icon ${agent.installed ? "installed" : ""}`}>
