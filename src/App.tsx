@@ -88,7 +88,14 @@ export default function App() {
     [inventory?.agents]
   );
   const installedAgents = useMemo(() => agents.filter((agent) => agent.installed), [agents]);
+  const installedAgentIds = useMemo(() => new Set(installedAgents.map((agent) => agent.id)), [installedAgents]);
   const allSkills = inventory?.skills ?? [];
+
+  useEffect(() => {
+    if (agentFilter !== "all" && !installedAgentIds.has(agentFilter)) {
+      setAgentFilter("all");
+    }
+  }, [agentFilter, installedAgentIds]);
 
   const filteredSkills = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -414,7 +421,7 @@ export default function App() {
 
         {view === "skills" && (
           <SkillsView
-            agents={agents}
+            agents={installedAgents}
             skills={filteredSkills}
             allSkills={allSkills}
             selectedSkill={selectedSkill}

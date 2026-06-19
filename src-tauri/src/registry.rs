@@ -130,7 +130,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             "Hermes",
             &["~/.hermes/skills/"],
             &[],
-            &["~/.hermes", "~/.hermes/skills/"],
+            &["~/.hermes"],
             &["hermes"],
             &["/Applications/Hermes.app", "~/Applications/Hermes.app"],
             12,
@@ -180,7 +180,7 @@ pub fn known_agents() -> Vec<AgentDefinition> {
             "OpenClaw",
             &["~/.openclaw/skills/"],
             &["skills", ".agents/skills"],
-            &["~/.openclaw", "~/.openclaw/skills/"],
+            &["~/.openclaw"],
             &["openclaw"],
             &["/Applications/OpenClaw.app", "~/Applications/OpenClaw.app"],
             18,
@@ -574,12 +574,13 @@ fn detect_install_sources(definition: &AgentDefinition) -> Vec<AgentDetectionSou
     for signal in &definition.active_signals {
         let path = expand_home(signal);
         if path.exists() {
-            let kind = if is_agent_skills_root_signal(definition, signal, &path) {
-                "skills-root"
-            } else {
-                "config"
-            };
-            push_source(&mut sources, &mut seen, kind, signal, path_to_string(&path));
+            push_source(
+                &mut sources,
+                &mut seen,
+                "config",
+                signal,
+                path_to_string(&path),
+            );
         }
     }
 
@@ -600,15 +601,9 @@ fn has_install_evidence(sources: &[AgentDetectionSource]) -> bool {
     sources.iter().any(|source| {
         matches!(
             source.kind.as_str(),
-            "cli" | "app" | "extension" | "plugin-installed" | "skills-root"
+            "cli" | "app" | "extension" | "plugin-installed"
         )
     })
-}
-
-fn is_agent_skills_root_signal(definition: &AgentDefinition, signal: &str, path: &Path) -> bool {
-    matches!(definition.id.as_str(), "hermes" | "openclaw")
-        && signal.trim_end_matches('/').ends_with("/skills")
-        && path.is_dir()
 }
 
 fn push_source(
@@ -1046,30 +1041,15 @@ mod tests {
     }
 
     #[test]
-    fn hermes_and_openclaw_skills_roots_are_install_evidence() {
-        let temp = tempfile::tempdir().expect("temp dir");
-        for (id, signal) in [
-            ("hermes", "~/.hermes/skills/"),
-            ("openclaw", "~/.openclaw/skills/"),
-        ] {
-            let agent = known_agents()
-                .into_iter()
-                .find(|agent| agent.id == id)
-                .expect("agent");
-            let kind = if is_agent_skills_root_signal(&agent, signal, temp.path()) {
-                "skills-root"
-            } else {
-                "config"
-            };
-            let sources = vec![AgentDetectionSource {
-                kind: kind.to_string(),
-                label: signal.to_string(),
-                path: path_to_string(temp.path()),
-                exists: true,
-            }];
+    fn config_source_is_not_install_evidence() {
+        let sources = vec![AgentDetectionSource {
+            kind: "config".to_string(),
+            label: "~/.openclaw/skills/".to_string(),
+            path: "/Users/example/.openclaw/skills".to_string(),
+            exists: true,
+        }];
 
-            assert!(has_install_evidence(&sources));
-        }
+        assert!(!has_install_evidence(&sources));
     }
 
     #[test]
