@@ -49,6 +49,15 @@ pub fn preview_sync(
 }
 
 #[tauri::command]
+pub fn preview_sync_from_installation(
+    app: AppHandle,
+    source: InstallationRef,
+    targets: Vec<AgentTarget>,
+) -> Result<SyncPlan, String> {
+    sync_plan::preview_sync_from_installation(&app, source, targets)
+}
+
+#[tauri::command]
 pub fn apply_sync_plan(app: AppHandle, plan_id: String) -> Result<ApplyResult, String> {
     sync_plan::apply_plan(&app, plan_id)
 }

@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   Check,
   ChevronRight,
-  Columns3,
   CopyCheck,
   FolderPlus,
   Library,
@@ -44,7 +43,7 @@ import type {
   SyncPlan
 } from "./types";
 
-type View = "agents" | "skills" | "compare" | "preview" | "settings";
+type View = "agents" | "skills" | "preview" | "settings";
 
 const defaultSettings: Settings = {
   libraryPath: "",
@@ -149,10 +148,26 @@ export default function App() {
     setError(null);
     setApplyResult(null);
     try {
-      const plan = await invoke<SyncPlan>("preview_sync", {
-        skillId: skill.id,
-        targets: targets ?? []
-      });
+      const validInstall = firstValidInstallation(skill);
+      const plan = skill.canonicalStatus === "imported"
+        ? await invoke<SyncPlan>("preview_sync", {
+            skillId: skill.id,
+            targets: targets ?? []
+          })
+        : await invoke<SyncPlan>("preview_sync_from_installation", {
+            source: validInstall
+              ? {
+                  installationId: validInstall.id,
+                  entryPath: validInstall.entryPath,
+                  slug: skill.slug
+                }
+              : {
+                  installationId: "",
+                  entryPath: "",
+                  slug: skill.slug
+                },
+            targets: targets ?? []
+          });
       setSyncPlan(plan);
       setView("preview");
     } catch (reason) {
@@ -237,9 +252,6 @@ export default function App() {
           <NavButton icon={<Library size={17} />} active={view === "skills"} onClick={() => setView("skills")}>
             {t(language, "navSkills")}
           </NavButton>
-          <NavButton icon={<Columns3 size={17} />} active={view === "compare"} onClick={() => setView("compare")}>
-            {t(language, "navCompare")}
-          </NavButton>
           <NavButton icon={<ShieldCheck size={17} />} active={view === "preview"} onClick={() => setView("preview")}>
             {t(language, "navPreview")}
           </NavButton>
@@ -314,9 +326,6 @@ export default function App() {
             onSync={(skill, target) => void previewSync(skill, [target])}
             language={language}
           />
-        )}
-        {view === "compare" && inventory && (
-          <CompareView inventory={inventory} skills={filteredSkills} language={language} />
         )}
         {view === "preview" && (
           <PreviewView
@@ -590,7 +599,7 @@ function SkillCard({
                   <div>
                     <button
                       className="secondary-button"
-                      disabled={skill.canonicalStatus !== "imported"}
+                      disabled={!validInstall}
                       onClick={() => onSync(skill, { agentId: agent.id, scope: "global" })}
                     >
                       <Link2 size={14} />
@@ -598,7 +607,7 @@ function SkillCard({
                     </button>
                     <button
                       className="secondary-button"
-                      disabled={skill.canonicalStatus !== "imported" || !canProjectSync || agent.projectRoots.length === 0}
+                      disabled={!validInstall || !canProjectSync || agent.projectRoots.length === 0}
                       onClick={() => onSync(skill, { agentId: agent.id, scope: "project" })}
                     >
                       <Link2 size={14} />

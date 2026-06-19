@@ -98,10 +98,59 @@ pub fn preview_sync(
     let mut blocked_conflicts = Vec::new();
     let mut preconditions = Vec::new();
 
-    if !source_path.join("SKILL.md").exists() {
+    let source_hash = if !source_path.join("SKILL.md").exists() {
         blocked_conflicts.push(format!(
             "{} is not imported into the central library yet",
             skill_id
+        ));
+        None
+    } else {
+        Some(hash_dir(&source_path)?)
+    };
+
+    append_sync_operations(
+        &settings,
+        &skill_id,
+        &source_path,
+        source_hash.as_deref(),
+        targets,
+        &backup_root,
+        &mut operations,
+        &mut blocked_conflicts,
+        &mut preconditions,
+    );
+
+    let plan = sync_plan_from_parts(
+        plan_id,
+        "sync",
+        operations,
+        preconditions,
+        blocked_conflicts,
+        created_at,
+    );
+    save_plan(app, &plan)?;
+    Ok(plan)
+}
+
+pub fn preview_sync_from_installation(
+    app: &AppHandle,
+    source: InstallationRef,
+    targets: Vec<AgentTarget>,
+) -> Result<SyncPlan, String> {
+    let settings = load_settings(app)?;
+    let source_path = PathBuf::from(&source.entry_path);
+    let destination = PathBuf::from(&settings.library_path).join(&source.slug);
+    let plan_id = plan_id("sync");
+    let created_at = Utc::now().to_rfc3339();
+    let backup_root = app_data_dir(app)?.join("backups").join(&plan_id);
+    let mut operations = Vec::new();
+    let mut blocked_conflicts = Vec::new();
+    let mut preconditions = Vec::new();
+
+    if source.entry_path.is_empty() || !source_path.join("SKILL.md").exists() {
+        blocked_conflicts.push(format!(
+            "{} has no valid source SKILL.md and cannot be synced",
+            source.slug
         ));
     }
 
@@ -111,6 +160,77 @@ pub fn preview_sync(
         None
     };
 
+    if let Some(source_hash) = &source_hash {
+        if destination.exists() {
+            let existing_hash = hash_dir(&destination)?;
+            if existing_hash == *source_hash {
+                operations.push(operation(
+                    "noop",
+                    "noop",
+                    Some(&source_path),
+                    Some(&destination),
+                    None,
+                    &format!("{} is already imported with the same content", source.slug),
+                    None,
+                    Some(&source.slug),
+                ));
+            } else {
+                blocked_conflicts.push(format!(
+                    "{} already exists in the central library with different content",
+                    source.slug
+                ));
+            }
+        } else {
+            preconditions
+                .push("Copy source skill into the central library before linking".to_string());
+            operations.push(operation(
+                "copy-to-library",
+                "planned",
+                Some(&source_path),
+                Some(&destination),
+                None,
+                &format!("Import {} into the central library", source.slug),
+                None,
+                Some(&source.slug),
+            ));
+        }
+    }
+
+    append_sync_operations(
+        &settings,
+        &source.slug,
+        &destination,
+        source_hash.as_deref(),
+        targets,
+        &backup_root,
+        &mut operations,
+        &mut blocked_conflicts,
+        &mut preconditions,
+    );
+
+    let plan = sync_plan_from_parts(
+        plan_id,
+        "sync",
+        operations,
+        preconditions,
+        blocked_conflicts,
+        created_at,
+    );
+    save_plan(app, &plan)?;
+    Ok(plan)
+}
+
+fn append_sync_operations(
+    settings: &crate::models::Settings,
+    skill_id: &str,
+    source_path: &Path,
+    source_hash: Option<&str>,
+    targets: Vec<AgentTarget>,
+    backup_root: &Path,
+    operations: &mut Vec<SyncOperation>,
+    blocked_conflicts: &mut Vec<String>,
+    preconditions: &mut Vec<String>,
+) {
     let installed_agent_ids = detect_agents(&settings, false)
         .into_iter()
         .filter(|agent| agent.installed)
@@ -165,18 +285,27 @@ pub fn preview_sync(
             plan_target_sync(
                 &agent.id,
                 &agent.label,
-                &skill_id,
-                &source_path,
-                source_hash.as_deref(),
+                skill_id,
+                source_path,
+                source_hash,
                 &root_path,
                 &target_path,
-                &backup_root,
-                &mut operations,
-                &mut blocked_conflicts,
+                backup_root,
+                operations,
+                blocked_conflicts,
             );
         }
     }
+}
 
+fn sync_plan_from_parts(
+    plan_id: String,
+    kind: &str,
+    operations: Vec<SyncOperation>,
+    preconditions: Vec<String>,
+    blocked_conflicts: Vec<String>,
+    created_at: String,
+) -> SyncPlan {
     let risk_level = if !blocked_conflicts.is_empty() {
         "blocked"
     } else if operations
@@ -188,17 +317,15 @@ pub fn preview_sync(
         "low"
     };
 
-    let plan = SyncPlan {
+    SyncPlan {
         plan_id,
-        kind: "sync".to_string(),
+        kind: kind.to_string(),
         risk_level: risk_level.to_string(),
         operations,
         preconditions,
         blocked_conflicts,
         created_at,
-    };
-    save_plan(app, &plan)?;
-    Ok(plan)
+    }
 }
 
 pub fn apply_plan(app: &AppHandle, plan_id: String) -> Result<ApplyResult, String> {
@@ -644,6 +771,51 @@ mod tests {
 
         assert!(operations.is_empty());
         assert_eq!(conflicts.len(), 1);
+    }
+
+    #[test]
+    fn external_sync_plan_copies_to_library_before_linking() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let source = temp.path().join("external").join("demo");
+        let library = temp.path().join("library").join("demo");
+        let root = temp.path().join("agent");
+        let target = root.join("demo");
+        fs::create_dir_all(&source).expect("source");
+        fs::create_dir_all(&root).expect("root");
+        fs::write(
+            source.join("SKILL.md"),
+            "---\nname: demo\ndescription: Demo\n---\nBody",
+        )
+        .expect("source skill");
+
+        let source_hash = hash_dir(&source).expect("hash");
+        let mut operations = vec![operation(
+            "copy-to-library",
+            "planned",
+            Some(&source),
+            Some(&library),
+            None,
+            "Import demo into the central library",
+            None,
+            Some("demo"),
+        )];
+        let mut conflicts = Vec::new();
+        plan_target_sync(
+            "agent",
+            "Agent",
+            "demo",
+            &library,
+            Some(&source_hash),
+            &root,
+            &target,
+            &temp.path().join("backups"),
+            &mut operations,
+            &mut conflicts,
+        );
+
+        assert!(conflicts.is_empty());
+        assert_eq!(operations[0].op_type, "copy-to-library");
+        assert_eq!(operations[1].op_type, "create-symlink");
     }
 
     #[cfg(unix)]

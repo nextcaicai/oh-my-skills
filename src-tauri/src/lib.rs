@@ -16,6 +16,7 @@ pub fn run() {
             commands::read_skill_content,
             commands::preview_adopt,
             commands::preview_sync,
+            commands::preview_sync_from_installation,
             commands::apply_sync_plan
         ])
         .run(tauri::generate_context!())
