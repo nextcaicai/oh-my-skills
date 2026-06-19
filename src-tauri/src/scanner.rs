@@ -200,6 +200,23 @@ fn scan_root(
         return Ok(());
     }
 
+    if root_path.join("SKILL.md").exists() {
+        let slug = skill_slug_from_path(&root_path)?;
+        let installation = inspect_installation(
+            &root.agent_id,
+            &root.agent_label,
+            &root.scope,
+            root_path.parent().unwrap_or(root_path.as_path()),
+            &root_path,
+            library_path,
+        );
+        for issue in &installation.issues {
+            issues.push(issue.clone());
+        }
+        grouped.entry(slug).or_default().push(installation);
+        return Ok(());
+    }
+
     for entry in fs::read_dir(&root_path)
         .map_err(|error| format!("Unable to read root {}: {error}", root.path))?
     {
@@ -510,5 +527,34 @@ mod tests {
             .issues
             .iter()
             .any(|issue| issue.code == "name-mismatch"));
+    }
+
+    #[test]
+    fn scans_root_that_is_itself_a_skill() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let skill = temp.path().join("direct-skill");
+        fs::create_dir_all(&skill).expect("skill dir");
+        fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: direct-skill\ndescription: Root skill\n---\nBody",
+        )
+        .expect("skill md");
+
+        let root = ResolvedRoot {
+            agent_id: "test".to_string(),
+            agent_label: "Test".to_string(),
+            scope: "global".to_string(),
+            path: path_to_string(&skill),
+            exists: true,
+            active: true,
+            orphaned: false,
+        };
+        let mut grouped = BTreeMap::new();
+        let mut issues = Vec::new();
+
+        scan_root(&root, temp.path(), &mut grouped, &mut issues).expect("scan root");
+
+        assert!(grouped.contains_key("direct-skill"));
+        assert!(issues.is_empty());
     }
 }

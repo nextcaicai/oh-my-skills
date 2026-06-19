@@ -67,7 +67,12 @@ pub fn known_agents() -> Vec<AgentDefinition> {
         agent(
             "codex",
             "Codex",
-            &["~/.agents/skills"],
+            &[
+                "~/.codex/skills",
+                "~/.codex/skills/.system",
+                "~/.skills-manager/skills",
+                "~/.agents/skills",
+            ],
             &[".agents/skills"],
             &["~/.codex"],
             &["codex"],
@@ -370,6 +375,26 @@ fn resolve_roots_for_definitions(
         }
     }
 
+    for definition in definitions {
+        let installed = install_map
+            .get(&definition.id)
+            .map(|sources| has_install_evidence(sources))
+            .unwrap_or(false);
+
+        for root in discovered_skill_roots_for_agent(&definition.id) {
+            let scope = discovered_root_scope(&root);
+            push_root(
+                &mut roots,
+                definition,
+                scope,
+                root,
+                installed,
+                include_orphaned,
+                false,
+            );
+        }
+    }
+
     if include_custom_roots {
         for root in &settings.custom_roots {
             push_custom_root(&mut roots, root, include_orphaned);
@@ -490,13 +515,26 @@ fn detect_install_sources(definition: &AgentDefinition) -> Vec<AgentDetectionSou
         }
     }
 
+    for root in discovered_skill_roots_for_agent(&definition.id) {
+        push_source(
+            &mut sources,
+            &mut seen,
+            "plugin-cache",
+            "installed skills",
+            path_to_string(&root),
+        );
+    }
+
     sources
 }
 
 fn has_install_evidence(sources: &[AgentDetectionSource]) -> bool {
-    sources
-        .iter()
-        .any(|source| matches!(source.kind.as_str(), "cli" | "app" | "extension"))
+    sources.iter().any(|source| {
+        matches!(
+            source.kind.as_str(),
+            "cli" | "app" | "extension" | "plugin-cache"
+        )
+    })
 }
 
 fn has_residual_evidence(sources: &[AgentDetectionSource]) -> bool {
@@ -690,6 +728,88 @@ fn extension_search_roots() -> Vec<PathBuf> {
     roots
 }
 
+fn discovered_skill_roots_for_agent(agent_id: &str) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    let mut seen = BTreeSet::new();
+
+    match agent_id {
+        "claude-code" => {
+            discover_plugin_skill_roots(
+                &mut roots,
+                &mut seen,
+                &expand_home("~/.claude/plugins/cache"),
+            );
+        }
+        "codex" => {
+            for root in [
+                "~/.codex/vendor_imports/skills/skills/.curated",
+                "~/.codex/vendor_imports/skills/skills/.system",
+            ] {
+                push_existing_skill_collection_root(&mut roots, &mut seen, expand_home(root));
+            }
+            discover_plugin_skill_roots(
+                &mut roots,
+                &mut seen,
+                &expand_home("~/.codex/plugins/cache"),
+            );
+        }
+        _ => {}
+    }
+
+    roots
+}
+
+fn discovered_root_scope(path: &Path) -> &'static str {
+    let value = path_to_string(path);
+    if value.contains("/plugins/cache/") {
+        "plugin"
+    } else if value.contains("/vendor_imports/") {
+        "vendor"
+    } else {
+        "global"
+    }
+}
+
+fn discover_plugin_skill_roots(
+    roots: &mut Vec<PathBuf>,
+    seen: &mut BTreeSet<String>,
+    cache_root: &Path,
+) {
+    if !cache_root.exists() {
+        return;
+    }
+
+    for namespace in read_dir_paths(cache_root) {
+        for plugin in read_dir_paths(&namespace) {
+            for version in read_dir_paths(&plugin) {
+                push_existing_skill_collection_root(roots, seen, version.join("skills"));
+            }
+        }
+    }
+}
+
+fn push_existing_skill_collection_root(
+    roots: &mut Vec<PathBuf>,
+    seen: &mut BTreeSet<String>,
+    path: PathBuf,
+) {
+    if path.is_dir() && has_skill_entries(&path) {
+        push_unique_path(roots, seen, path);
+    }
+}
+
+fn read_dir_paths(path: &Path) -> Vec<PathBuf> {
+    fs::read_dir(path)
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| path.is_dir())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn push_unique_name(names: &mut Vec<String>, seen: &mut BTreeSet<String>, name: String) {
     if seen.insert(name.to_ascii_lowercase()) {
         names.push(name);
@@ -709,6 +829,10 @@ fn has_entries(path: &Path) -> bool {
 }
 
 fn count_root_entries(path: &Path) -> usize {
+    if path.join("SKILL.md").exists() {
+        return 1;
+    }
+
     fs::read_dir(path)
         .map(|entries| {
             entries
@@ -717,10 +841,15 @@ fn count_root_entries(path: &Path) -> usize {
                     fs::symlink_metadata(entry.path())
                         .map(|metadata| metadata.is_dir() || metadata.file_type().is_symlink())
                         .unwrap_or(false)
+                        && entry.path().join("SKILL.md").exists()
                 })
                 .count()
         })
         .unwrap_or(0)
+}
+
+fn has_skill_entries(path: &Path) -> bool {
+    count_root_entries(path) > 0
 }
 
 fn dedupe_roots(roots: Vec<ResolvedRoot>) -> Vec<ResolvedRoot> {
@@ -815,5 +944,42 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn discovers_plugin_skill_collection_roots() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let skills = temp
+            .path()
+            .join("publisher")
+            .join("plugin")
+            .join("1.0.0")
+            .join("skills");
+        let skill = skills.join("example-skill");
+        fs::create_dir_all(&skill).expect("skill dir");
+        fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: example-skill\ndescription: Example\n---\nBody",
+        )
+        .expect("skill md");
+
+        let mut roots = Vec::new();
+        let mut seen = BTreeSet::new();
+        discover_plugin_skill_roots(&mut roots, &mut seen, temp.path());
+
+        assert_eq!(roots, vec![skills]);
+    }
+
+    #[test]
+    fn counts_root_that_is_itself_a_skill() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        fs::write(
+            temp.path().join("SKILL.md"),
+            "---\nname: root-skill\ndescription: Root\n---\nBody",
+        )
+        .expect("skill md");
+
+        assert_eq!(count_root_entries(temp.path()), 1);
+        assert!(has_skill_entries(temp.path()));
     }
 }
