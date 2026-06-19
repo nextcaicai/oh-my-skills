@@ -289,8 +289,8 @@ p {
 }
 
 .agent-icon img {
-  width: var(--agent-icon-size, 25px);
-  height: var(--agent-icon-size, 25px);
+  width: var(--agent-icon-size, 30px);
+  height: var(--agent-icon-size, 30px);
   object-fit: contain;
 }
 

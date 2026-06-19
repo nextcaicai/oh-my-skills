@@ -999,7 +999,7 @@ function SettingsSheet({
 function AgentIcon({ agent }: { agent: AgentRecord }) {
   const icon = agentIconAsset(agent.id);
   const fallback = agent.label.slice(0, 2).toUpperCase();
-  const iconStyle = icon ? ({ "--agent-icon-size": `${icon.size ?? 25}px` } as CSSProperties) : undefined;
+  const iconStyle = icon ? ({ "--agent-icon-size": `${icon.size ?? 30}px` } as CSSProperties) : undefined;
 
   return (
     <span className={`agent-icon ${agent.installed ? "installed" : ""}`}>
