@@ -1,14 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import ReactMarkdown from "react-markdown";
 import {
   AlertTriangle,
   Check,
   ChevronRight,
   Columns3,
   CopyCheck,
-  ExternalLink,
-  FileText,
   FolderPlus,
   Library,
   Link2,
@@ -41,7 +38,6 @@ import type {
   ApplyResult,
   InventorySnapshot,
   Settings,
-  SkillContent,
   SkillInstallation,
   SkillIssue,
   SkillRecord,
@@ -63,11 +59,9 @@ export default function App() {
   const [draftSettings, setDraftSettings] = useState<Settings>(defaultSettings);
   const [inventory, setInventory] = useState<InventorySnapshot | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
-  const [skillContent, setSkillContent] = useState<SkillContent | null>(null);
-  const [view, setView] = useState<View>("agents");
+  const [view, setView] = useState<View>("skills");
   const [query, setQuery] = useState("");
   const [includeOrphaned, setIncludeOrphaned] = useState(false);
-  const [selectedTargets, setSelectedTargets] = useState<Record<string, boolean>>({});
   const [syncPlan, setSyncPlan] = useState<SyncPlan | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [busy, setBusy] = useState("Starting");
@@ -78,30 +72,6 @@ export default function App() {
   useEffect(() => {
     void boot();
   }, []);
-
-  useEffect(() => {
-    const selectedSkill = inventory?.skills.find((skill) => skill.id === selectedSkillId);
-    if (!selectedSkill) {
-      setSkillContent(null);
-      return;
-    }
-    const path = selectedSkill.canonicalPath ?? selectedSkill.installations[0]?.entryPath;
-    if (!path) {
-      setSkillContent(null);
-      return;
-    }
-    invoke<SkillContent>("read_skill_content", { skillRef: { path } })
-      .then(setSkillContent)
-      .catch((reason) => setError(String(reason)));
-    setSelectedTargets(
-      Object.fromEntries(selectedSkill.missingAgents.map((agentId) => [agentId, true]))
-    );
-  }, [inventory, selectedSkillId]);
-
-  const selectedSkill = useMemo(
-    () => inventory?.skills.find((skill) => skill.id === selectedSkillId) ?? null,
-    [inventory, selectedSkillId]
-  );
 
   const filteredSkills = useMemo(() => {
     const text = query.trim().toLowerCase();
@@ -143,7 +113,7 @@ export default function App() {
         options: { includeOrphaned: orphaned }
       });
       setInventory(next);
-      setSelectedSkillId((current) => current ?? next.skills[0]?.id ?? null);
+      setSelectedSkillId((current) => current && next.skills.some((skill) => skill.id === current) ? current : null);
     } catch (reason) {
       setError(String(reason));
     } finally {
@@ -174,17 +144,14 @@ export default function App() {
     }
   }
 
-  async function previewSync(skill: SkillRecord) {
+  async function previewSync(skill: SkillRecord, targets?: AgentTarget[]) {
     setBusy("Planning sync");
     setError(null);
     setApplyResult(null);
-    const targets: AgentTarget[] = Object.entries(selectedTargets)
-      .filter(([, selected]) => selected)
-      .map(([agentId]) => ({ agentId, scope: "global" }));
     try {
       const plan = await invoke<SyncPlan>("preview_sync", {
         skillId: skill.id,
-        targets
+        targets: targets ?? []
       });
       setSyncPlan(plan);
       setView("preview");
@@ -342,6 +309,9 @@ export default function App() {
             selectedSkillId={selectedSkillId}
             onSelect={setSelectedSkillId}
             settings={settings}
+            agents={inventory?.agents ?? []}
+            onAdopt={(skill) => void previewAdopt(skill)}
+            onSync={(skill, target) => void previewSync(skill, [target])}
             language={language}
           />
         )}
@@ -370,19 +340,6 @@ export default function App() {
         )}
       </section>
 
-      <SkillDetail
-        skill={selectedSkill}
-        content={skillContent}
-        agents={inventory?.agents ?? []}
-        selectedTargets={selectedTargets}
-        onTargetChange={(agentId, selected) =>
-          setSelectedTargets((current) => ({ ...current, [agentId]: selected }))
-        }
-        onAdopt={previewAdopt}
-        onSync={previewSync}
-        showRawPaths={settings.showRawPaths}
-        language={language}
-      />
     </main>
   );
 }
@@ -506,16 +463,22 @@ function SkillsView({
   selectedSkillId,
   onSelect,
   settings,
+  agents,
+  onAdopt,
+  onSync,
   language
 }: {
   skills: SkillRecord[];
   selectedSkillId: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (id: string | null) => void;
   settings: Settings;
+  agents: AgentRecord[];
+  onAdopt: (skill: SkillRecord) => void;
+  onSync: (skill: SkillRecord, target: AgentTarget) => void;
   language: Language;
 }) {
   return (
-    <div className="panel">
+    <div className="panel skills-workbench">
       <div className="panel-title">
         <div>
           <h1>{t(language, "skillsTitle")}</h1>
@@ -524,45 +487,171 @@ function SkillsView({
         <span className="path-chip">{settings.libraryPath || t(language, "libraryNotInitialized")}</span>
       </div>
 
-      <div className="table skill-table">
-        <div className="thead grid-skills">
-          <span>{t(language, "tableSkill")}</span>
-          <span>{t(language, "tableCoverage")}</span>
-          <span>{t(language, "tableState")}</span>
-          <span>{t(language, "tableSources")}</span>
-        </div>
-        <div className="tbody">
-          {skills.map((skill) => (
-            <button
+      <div className="skill-card-list">
+        {skills.map((skill) => {
+          const expanded = selectedSkillId === skill.id;
+          return (
+            <SkillCard
               key={skill.id}
-              className={`tr grid-skills ${selectedSkillId === skill.id ? "selected" : ""}`}
-              onClick={() => onSelect(skill.id)}
-            >
-              <span>
-                <strong>{skill.displayName}</strong>
-                <small>{skill.description || skill.slug}</small>
-              </span>
-              <span>
-                <Coverage skill={skill} />
-              </span>
-              <span>
-                <StatePill skill={skill} language={language} />
-              </span>
-              <span className="agent-list">
-                {skill.installations.slice(0, 4).map((installation) => (
-                  <AgentBadge
-                    key={installation.id}
-                    label={installation.agentLabel}
-                    status={installation.status}
-                    language={language}
-                  />
-                ))}
-                {skill.installations.length > 4 && <em>+{skill.installations.length - 4}</em>}
-              </span>
-            </button>
-          ))}
-        </div>
+              skill={skill}
+              expanded={expanded}
+              agents={agents}
+              settings={settings}
+              onToggle={() => onSelect(expanded ? null : skill.id)}
+              onAdopt={onAdopt}
+              onSync={onSync}
+              language={language}
+            />
+          );
+        })}
       </div>
+    </div>
+  );
+}
+
+function SkillCard({
+  skill,
+  expanded,
+  agents,
+  settings,
+  onToggle,
+  onAdopt,
+  onSync,
+  language
+}: {
+  skill: SkillRecord;
+  expanded: boolean;
+  agents: AgentRecord[];
+  settings: Settings;
+  onToggle: () => void;
+  onAdopt: (skill: SkillRecord) => void;
+  onSync: (skill: SkillRecord, target: AgentTarget) => void;
+  language: Language;
+}) {
+  const validInstall = firstValidInstallation(skill);
+  const currentPath = skill.canonicalPath ?? validInstall?.entryPath ?? skill.installations[0]?.entryPath;
+  const source = inferSkillSource(currentPath, skill);
+  const missingAgents = agents.filter((agent) => agent.installed && skill.missingAgents.includes(agent.id));
+  const installedAgents = skill.installations.slice(0, 5);
+  const canProjectSync = settings.projectFolders.length > 0;
+
+  return (
+    <article className={`skill-card ${expanded ? "expanded" : ""}`}>
+      <button className="skill-card-summary" onClick={onToggle}>
+        <span className="skill-card-title">
+          <strong>{skill.displayName}</strong>
+          <small>{skill.description || skill.slug}</small>
+        </span>
+        <span className="skill-card-meta">
+          <Coverage skill={skill} />
+          <StatePill skill={skill} language={language} />
+          <span className="agent-list compact">
+            {installedAgents.map((installation) => (
+              <AgentBadge
+                key={installation.id}
+                label={installation.agentLabel}
+                status={installation.status}
+                language={language}
+              />
+            ))}
+            {skill.installations.length > installedAgents.length && (
+              <em>+{skill.installations.length - installedAgents.length}</em>
+            )}
+          </span>
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="skill-card-detail">
+          <div className="skill-detail-grid">
+            <InfoBlock label={t(language, "currentPath")} value={currentPath ?? t(language, "unknown")} code />
+            <InfoBlock label={t(language, "source")} value={sourceLabel(language, source)} />
+            <InfoBlock label={t(language, "description")} value={skill.description || t(language, "noDescription")} />
+          </div>
+
+          <div className="card-section">
+            <div className="section-heading">
+              <h3>{t(language, "syncTargets")}</h3>
+              <button
+                className="secondary-button"
+                disabled={skill.canonicalStatus === "imported" || !validInstall}
+                onClick={() => onAdopt(skill)}
+              >
+                <Library size={15} />
+                {t(language, "import")}
+              </button>
+            </div>
+
+            <div className="sync-target-grid">
+              {missingAgents.length === 0 && <span className="muted">{t(language, "noMissingAgents")}</span>}
+              {missingAgents.map((agent) => (
+                <div className="sync-target" key={agent.id}>
+                  <strong>{agent.label}</strong>
+                  <div>
+                    <button
+                      className="secondary-button"
+                      disabled={skill.canonicalStatus !== "imported"}
+                      onClick={() => onSync(skill, { agentId: agent.id, scope: "global" })}
+                    >
+                      <Link2 size={14} />
+                      {t(language, "syncGlobal")}
+                    </button>
+                    <button
+                      className="secondary-button"
+                      disabled={skill.canonicalStatus !== "imported" || !canProjectSync || agent.projectRoots.length === 0}
+                      onClick={() => onSync(skill, { agentId: agent.id, scope: "project" })}
+                    >
+                      <Link2 size={14} />
+                      {t(language, "syncProject")}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {skill.installations.length > 0 && (
+            <div className="card-section">
+              <h3>{t(language, "installedIn")}</h3>
+              <div className="install-list inline">
+                {skill.installations.map((installation) => (
+                  <div className="install-row" key={installation.id}>
+                    <AgentBadge label={installation.agentLabel} status={installation.status} language={language} />
+                    <span>{installation.scope}</span>
+                    {installation.isSymlink && <Link2 size={14} />}
+                    {installation.issues.length > 0 && <AlertTriangle size={14} />}
+                    {settings.showRawPaths && <code>{installation.entryPath}</code>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {skill.issues.length > 0 && (
+            <div className="card-section">
+              <h3>{t(language, "issues")}</h3>
+              <IssueList issues={skill.issues} language={language} />
+            </div>
+          )}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function InfoBlock({
+  label,
+  value,
+  code = false
+}: {
+  label: string;
+  value: string;
+  code?: boolean;
+}) {
+  return (
+    <div className="info-block">
+      <span>{label}</span>
+      {code ? <code>{value}</code> : <strong>{value}</strong>}
     </div>
   );
 }
@@ -801,121 +890,6 @@ function SettingsView({
   );
 }
 
-function SkillDetail({
-  skill,
-  content,
-  agents,
-  selectedTargets,
-  onTargetChange,
-  onAdopt,
-  onSync,
-  showRawPaths,
-  language
-}: {
-  skill: SkillRecord | null;
-  content: SkillContent | null;
-  agents: { id: string; label: string }[];
-  selectedTargets: Record<string, boolean>;
-  onTargetChange: (agentId: string, selected: boolean) => void;
-  onAdopt: (skill: SkillRecord) => void;
-  onSync: (skill: SkillRecord) => void;
-  showRawPaths: boolean;
-  language: Language;
-}) {
-  if (!skill) {
-    return (
-      <aside className="detail empty-detail">
-        <FileText size={28} />
-        <span>{t(language, "selectSkill")}</span>
-      </aside>
-    );
-  }
-
-  const missing = agents.filter((agent) => skill.missingAgents.includes(agent.id));
-  const validInstall = firstValidInstallation(skill);
-
-  return (
-    <aside className="detail">
-      <div className="detail-heading">
-        <div>
-          <h2>{skill.displayName}</h2>
-          <span>{skill.slug}</span>
-        </div>
-        <StatePill skill={skill} language={language} />
-      </div>
-
-      <div className="action-row">
-        <button
-          className="secondary-button"
-          disabled={skill.canonicalStatus === "imported" || !validInstall}
-          onClick={() => onAdopt(skill)}
-        >
-          <Library size={16} />
-          {t(language, "import")}
-        </button>
-        <button
-          className="primary-button"
-          disabled={skill.canonicalStatus !== "imported"}
-          onClick={() => onSync(skill)}
-        >
-          <Link2 size={16} />
-          {t(language, "sync")}
-        </button>
-      </div>
-
-      <section className="detail-section">
-        <h3>{t(language, "installedIn")}</h3>
-        <div className="install-list">
-          {skill.installations.map((installation) => (
-            <div className="install-row" key={installation.id}>
-              <AgentBadge label={installation.agentLabel} status={installation.status} language={language} />
-              <span>{installation.scope}</span>
-              {installation.isSymlink && <Link2 size={14} />}
-              {installation.issues.length > 0 && <AlertTriangle size={14} />}
-              {showRawPaths && <code>{installation.entryPath}</code>}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="detail-section">
-        <h3>{t(language, "missingAgents")}</h3>
-        <div className="target-list">
-          {missing.length === 0 && <span className="muted">{t(language, "noMissingAgents")}</span>}
-          {missing.slice(0, 12).map((agent) => (
-            <label className="target-row" key={agent.id}>
-              <input
-                type="checkbox"
-                checked={selectedTargets[agent.id] ?? false}
-                onChange={(event) => onTargetChange(agent.id, event.target.checked)}
-              />
-              <span>{agent.label}</span>
-            </label>
-          ))}
-          {missing.length > 12 && <span className="muted">+{missing.length - 12} {t(language, "more")}</span>}
-        </div>
-      </section>
-
-      <section className="detail-section">
-        <h3>{t(language, "issues")}</h3>
-        <IssueList issues={skill.issues} language={language} />
-      </section>
-
-      <section className="detail-section markdown-section">
-        <div className="section-heading">
-          <h3>SKILL.md</h3>
-          {content?.path && <ExternalLink size={15} />}
-        </div>
-        {content ? (
-          <ReactMarkdown>{content.markdownBody || content.content}</ReactMarkdown>
-        ) : (
-          <span className="muted">{t(language, "noReadableSkill")}</span>
-        )}
-      </section>
-    </aside>
-  );
-}
-
 function Coverage({ skill }: { skill: SkillRecord }) {
   const total = skill.installations.length + skill.missingAgents.length;
   const percent = total === 0 ? 0 : Math.round((skill.installations.length / total) * 100);
@@ -979,6 +953,27 @@ function firstValidInstallation(skill: SkillRecord): SkillInstallation | null {
     skill.installations.find((installation) => installation.status !== "invalid" && !installation.brokenSymlink) ??
     null
   );
+}
+
+function inferSkillSource(path: string | undefined, skill: SkillRecord): "skills-sh" | "github" | "plugin" | "library" | "local" {
+  const value = (path ?? "").toLowerCase();
+  if (value.includes("skills.sh")) return "skills-sh";
+  if (value.includes("/plugins/") || value.includes("/plugin/")) return "plugin";
+  if (value.includes("/library/skills/")) return "library";
+  if (value.includes("/github/") || value.includes("/gh/") || value.includes(".git/")) return "github";
+  if (skill.canonicalStatus === "imported") return "library";
+  return "local";
+}
+
+function sourceLabel(language: Language, source: ReturnType<typeof inferSkillSource>): string {
+  const labels: Record<ReturnType<typeof inferSkillSource>, { "zh-CN": string; en: string }> = {
+    "skills-sh": { "zh-CN": "skills.sh", en: "skills.sh" },
+    github: { "zh-CN": "GitHub 仓库", en: "GitHub repository" },
+    plugin: { "zh-CN": "插件", en: "Plugin" },
+    library: { "zh-CN": "中心库", en: "Library" },
+    local: { "zh-CN": "本地", en: "Local" }
+  };
+  return labels[source][language];
 }
 
 function matrixColumns(agentCount: number) {

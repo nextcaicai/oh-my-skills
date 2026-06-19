@@ -136,38 +136,45 @@ pub fn preview_sync(
             blocked_conflicts.push(format!("{} is not detected as installed", agent.label));
             continue;
         }
-        let Some(root) = agent.global_roots.first() else {
-            blocked_conflicts.push(format!("{} has no global root configured", agent.label));
-            continue;
-        };
-        let root_path = crate::fs_ops::expand_home(root);
-        let target_path = root_path.join(&skill_id);
-        if !root_path.exists() {
-            preconditions.push(format!("Create {} global skill root", agent.label));
-            operations.push(operation(
-                "create-root",
-                "planned",
-                None,
-                Some(&root_path),
-                None,
-                &format!("Create skill root for {}", agent.label),
-                Some(&agent.id),
-                Some(&skill_id),
+        let target_roots = target_roots_for_agent(&agent, target.scope.as_deref(), &settings);
+        if target_roots.is_empty() {
+            let scope = target.scope.as_deref().unwrap_or("global");
+            blocked_conflicts.push(format!(
+                "{} has no {scope} skill root configured",
+                agent.label
             ));
+            continue;
         }
 
-        plan_target_sync(
-            &agent.id,
-            &agent.label,
-            &skill_id,
-            &source_path,
-            source_hash.as_deref(),
-            &root_path,
-            &target_path,
-            &backup_root,
-            &mut operations,
-            &mut blocked_conflicts,
-        );
+        for (scope, root_path) in target_roots {
+            let target_path = root_path.join(&skill_id);
+            if !root_path.exists() {
+                preconditions.push(format!("Create {} {scope} skill root", agent.label));
+                operations.push(operation(
+                    "create-root",
+                    "planned",
+                    None,
+                    Some(&root_path),
+                    None,
+                    &format!("Create {scope} skill root for {}", agent.label),
+                    Some(&agent.id),
+                    Some(&skill_id),
+                ));
+            }
+
+            plan_target_sync(
+                &agent.id,
+                &agent.label,
+                &skill_id,
+                &source_path,
+                source_hash.as_deref(),
+                &root_path,
+                &target_path,
+                &backup_root,
+                &mut operations,
+                &mut blocked_conflicts,
+            );
+        }
     }
 
     let risk_level = if !blocked_conflicts.is_empty() {
@@ -391,6 +398,30 @@ fn default_targets(settings: &crate::models::Settings) -> Vec<AgentTarget> {
             scope: Some("global".to_string()),
         })
         .collect()
+}
+
+fn target_roots_for_agent(
+    agent: &crate::models::AgentDefinition,
+    scope: Option<&str>,
+    settings: &crate::models::Settings,
+) -> Vec<(String, PathBuf)> {
+    match scope.unwrap_or("global") {
+        "project" => settings
+            .project_folders
+            .iter()
+            .flat_map(|folder| {
+                agent
+                    .project_roots
+                    .iter()
+                    .map(move |root| ("project".to_string(), PathBuf::from(folder).join(root)))
+            })
+            .collect(),
+        _ => agent
+            .global_roots
+            .iter()
+            .map(|root| ("global".to_string(), crate::fs_ops::expand_home(root)))
+            .collect(),
+    }
 }
 
 fn operation(
