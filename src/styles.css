@@ -243,17 +243,19 @@ p {
 
 .agent-list {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   min-height: 0;
-  gap: 4px;
+  align-content: start;
+  gap: 4px 12px;
   overflow: auto;
   padding-right: 4px;
 }
 
 .agent-card {
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) 84px 92px 24px;
+  grid-template-columns: 46px minmax(0, 1fr) 62px 80px 20px;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-height: 74px;
   padding: 10px 16px;
   border-radius: 8px;
