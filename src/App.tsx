@@ -998,9 +998,9 @@ function SkillRow({
       </button>
       <button className="skill-row-main" onClick={onSelect} type="button">
         <strong>
-          {active ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
           <span className="skill-name-text">{skill.displayName}</span>
           <SourceOwnerTag skill={skill} skillLocks={skillLocks} />
+          {active ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         </strong>
         <span className="skill-row-description">{skill.description || skill.slug}</span>
       </button>

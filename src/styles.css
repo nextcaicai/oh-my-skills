@@ -813,7 +813,8 @@ p {
   align-items: center;
   gap: 10px;
   min-height: 62px;
-  padding: 8px 0;
+  margin: 0 -18px;
+  padding: 8px 18px;
   border-bottom: 1px solid rgba(30, 54, 83, 0.10);
   border-radius: 0;
   cursor: pointer;
@@ -864,13 +865,14 @@ p {
   flex: 0 0 auto;
   max-width: 130px;
   overflow: hidden;
-  padding: 2px 7px;
+  padding: 1px 7px;
   border-radius: 999px;
   background: rgba(21, 58, 91, 0.08);
   color: rgba(23, 32, 46, 0.40);
-  font-size: 11px;
+  font-size: 10px;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -961,8 +963,8 @@ p {
   align-items: start;
   min-height: 0;
   overflow: hidden;
-  margin: 0 0 8px 34px;
-  padding: 12px 14px 14px;
+  margin: 0 -18px 8px;
+  padding: 24px 28px 22px 98px;
   border: 1px solid rgba(30, 54, 83, 0.12);
   border-top: 0;
   border-radius: 0 0 8px 8px;
