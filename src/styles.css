@@ -803,9 +803,10 @@ p {
 
 .skill-table-head {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 230px;
+  grid-template-columns: 34px minmax(260px, 1fr) minmax(180px, 260px) 230px;
   gap: 10px;
   align-items: center;
+  margin-right: 18px;
   min-height: 28px;
   padding: 0 18px;
   border-bottom: 1px solid rgba(30, 54, 83, 0.08);
@@ -814,16 +815,21 @@ p {
   font-weight: 850;
 }
 
+.skill-table-head span:last-child {
+  text-align: right;
+}
+
 .skill-list {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   padding: 0 18px 8px;
+  scrollbar-gutter: stable;
 }
 
 .skill-row {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 230px;
+  grid-template-columns: 34px minmax(260px, 1fr) minmax(180px, 260px) 230px;
   align-items: center;
   gap: 10px;
   min-height: 62px;
@@ -856,6 +862,7 @@ p {
 
 .skill-row-main {
   min-width: 0;
+  padding: 0;
   background: transparent;
   color: #17202e;
   cursor: pointer;
@@ -878,6 +885,33 @@ p {
 .skill-row-main span {
   margin-top: 3px;
   color: rgba(23, 32, 46, 0.58);
+  font-size: 11px;
+}
+
+.skill-source-cell {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  color: #17202e;
+}
+
+.skill-source-cell strong,
+.skill-source-cell span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-source-cell strong {
+  color: rgba(23, 32, 46, 0.40);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.skill-source-cell span {
+  color: rgba(23, 32, 46, 0.56);
   font-size: 11px;
 }
 

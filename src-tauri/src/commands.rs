@@ -1,8 +1,10 @@
 use crate::models::{
     AgentTarget, ApplyResult, InstallationRef, InventorySnapshot, ProjectWorkspaceCandidate,
-    ScanOptions, Settings, SkillContent, SkillRef, SyncPlan,
+    ScanOptions, Settings, SkillContent, SkillLockEntry, SkillLockFile, SkillRef, SyncPlan,
 };
-use crate::{registry, scanner, settings, sync_plan};
+use crate::{fs_ops, registry, scanner, settings, sync_plan};
+use std::collections::BTreeMap;
+use std::fs;
 use tauri::AppHandle;
 
 #[tauri::command]
@@ -43,6 +45,21 @@ pub fn discover_project_workspaces(
 #[tauri::command]
 pub fn read_skill_content(skill_ref: SkillRef) -> Result<SkillContent, String> {
     scanner::read_skill_content(skill_ref)
+}
+
+#[tauri::command]
+pub fn read_skill_lock() -> Result<BTreeMap<String, SkillLockEntry>, String> {
+    let path = fs_ops::expand_home("~/.agents/.skill-lock.json");
+    let Ok(text) = fs::read_to_string(&path) else {
+        return Ok(BTreeMap::new());
+    };
+    let lock = serde_json::from_str::<SkillLockFile>(&text).map_err(|error| {
+        format!(
+            "Unable to parse skill lock {}: {error}",
+            fs_ops::path_to_string(&path)
+        )
+    })?;
+    Ok(lock.skills)
 }
 
 #[tauri::command]

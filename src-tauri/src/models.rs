@@ -180,6 +180,23 @@ pub struct SkillRef {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct SkillLockEntry {
+    pub source: Option<String>,
+    pub source_type: Option<String>,
+    pub source_url: Option<String>,
+    pub skill_path: Option<String>,
+    pub installed_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillLockFile {
+    pub skills: BTreeMap<String, SkillLockEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct SkillContent {
     pub path: String,
     pub title: String,

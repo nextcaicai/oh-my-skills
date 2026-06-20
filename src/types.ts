@@ -126,6 +126,15 @@ export type SkillContent = {
   markdownBody: string;
 };
 
+export type SkillLockEntry = {
+  source?: string;
+  sourceType?: string;
+  sourceUrl?: string;
+  skillPath?: string;
+  installedAt?: string;
+  updatedAt?: string;
+};
+
 export type InstallationRef = {
   installationId: string;
   entryPath: string;

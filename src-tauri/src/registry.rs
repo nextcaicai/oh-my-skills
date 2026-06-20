@@ -1287,7 +1287,10 @@ enabled = true
             .join("plugin-dev")
             .join("skills")
             .join("skill-development");
-        let non_skill = marketplace.join("official").join("plugins").join("plugin-dev");
+        let non_skill = marketplace
+            .join("official")
+            .join("plugins")
+            .join("plugin-dev");
         let skipped = marketplace
             .join("official")
             .join("plugins")

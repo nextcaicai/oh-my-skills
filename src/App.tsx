@@ -35,6 +35,7 @@ import type {
   SkillContent,
   SkillInstallation,
   SkillIssue,
+  SkillLockEntry,
   SkillRecord,
   SyncPlan
 } from "./types";
@@ -55,6 +56,7 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [draftSettings, setDraftSettings] = useState<AppSettings>(defaultSettings);
   const [inventory, setInventory] = useState<InventorySnapshot | null>(null);
+  const [skillLocks, setSkillLocks] = useState<Record<string, SkillLockEntry>>({});
   const [view, setView] = useState<View>("agents");
   const [skillWorkspace, setSkillWorkspace] = useState<SkillWorkspace>("global");
   const [query, setQuery] = useState("");
@@ -159,6 +161,7 @@ export default function App() {
     if (!isTauriRuntime()) {
       setSettings(defaultSettings);
       setDraftSettings(defaultSettings);
+      setSkillLocks(demoSkillLocks);
       setInventory(demoInventory);
       setSelectedSkillId(demoInventory.skills[0]?.id ?? null);
       setBusy("");
@@ -168,6 +171,7 @@ export default function App() {
       const loaded = await invoke<AppSettings>("get_settings");
       setSettings(loaded);
       setDraftSettings(loaded);
+      await refreshSkillLocks();
       await refreshInventory();
     } catch (reason) {
       setError(String(reason));
@@ -180,6 +184,7 @@ export default function App() {
     setBusy("扫描本机 Agent 与 Skills");
     setError(null);
     try {
+      await refreshSkillLocks();
       const next = await invoke<InventorySnapshot>("scan_inventory", {
         options: { includeOrphaned: false }
       });
@@ -197,6 +202,15 @@ export default function App() {
     } finally {
       setBusy("");
     }
+  }
+
+  async function refreshSkillLocks() {
+    if (!isTauriRuntime()) {
+      setSkillLocks(demoSkillLocks);
+      return;
+    }
+    const locks = await invoke<Record<string, SkillLockEntry>>("read_skill_lock");
+    setSkillLocks(locks);
   }
 
   async function loadSkillContent(skill: SkillRecord) {
@@ -518,6 +532,7 @@ export default function App() {
             skills={filteredSkills}
             allSkills={allSkills}
             sourceSkills={visibleSourceSkills}
+            skillLocks={skillLocks}
             workspace={skillWorkspace}
             projectFolders={projectFolders}
             selectedProjectFolder={selectedProjectFolder}
@@ -698,6 +713,7 @@ function SkillsView({
   skills,
   allSkills,
   sourceSkills,
+  skillLocks,
   workspace,
   projectFolders,
   selectedProjectFolder,
@@ -728,6 +744,7 @@ function SkillsView({
   skills: SkillRecord[];
   allSkills: SkillRecord[];
   sourceSkills: SkillRecord[];
+  skillLocks: Record<string, SkillLockEntry>;
   workspace: SkillWorkspace;
   projectFolders: string[];
   selectedProjectFolder: string | null;
@@ -954,6 +971,7 @@ function SkillsView({
           <div className="skill-table-head">
             <span />
             <span>Skill</span>
+            <span>Skill 来源</span>
             <span>Agent 覆盖</span>
           </div>
 
@@ -963,6 +981,7 @@ function SkillsView({
                 key={skill.id}
                 skill={skill}
                 agents={agents}
+                skillLocks={skillLocks}
                 active={selectedSkill?.id === skill.id}
                 checked={selectedSkillIds.has(skill.id)}
                 onSelect={() => onSelectSkill(skill.id)}
@@ -1016,6 +1035,7 @@ function SkillsView({
 function SkillRow({
   skill,
   agents,
+  skillLocks,
   active,
   checked,
   onSelect,
@@ -1023,6 +1043,7 @@ function SkillRow({
 }: {
   skill: SkillRecord;
   agents: AgentRecord[];
+  skillLocks: Record<string, SkillLockEntry>;
   active: boolean;
   checked: boolean;
   onSelect: () => void;
@@ -1042,14 +1063,22 @@ function SkillRow({
         {checked ? <Check size={14} /> : <Circle size={13} />}
       </button>
       <button className="skill-row-main" onClick={onSelect} type="button">
-        <strong>
-          {skill.displayName}
-          <em>{skill.canonicalStatus === "imported" ? "本地" : "外部"}</em>
-        </strong>
+        <strong>{skill.displayName}</strong>
         <span>{skill.description || skill.slug}</span>
       </button>
+      <SkillSourceCell skill={skill} skillLocks={skillLocks} />
       <SkillAgentStack skill={skill} agents={agents} />
     </article>
+  );
+}
+
+function SkillSourceCell({ skill, skillLocks }: { skill: SkillRecord; skillLocks: Record<string, SkillLockEntry> }) {
+  const source = skillSourceSummary(skill, skillLocks);
+  return (
+    <div className="skill-source-cell" title={`${source.label}\n${source.detail}`}>
+      <strong>{source.label}</strong>
+      <span>{source.detail}</span>
+    </div>
   );
 }
 
@@ -1462,6 +1491,86 @@ function firstValidInstallation(skill: SkillRecord): SkillInstallation | null {
   return skill.installations.find((installation) => installation.status !== "invalid" && !installation.brokenSymlink) ?? null;
 }
 
+function skillSourceSummary(skill: SkillRecord, skillLocks: Record<string, SkillLockEntry>) {
+  const skillsShInstallation = skill.installations.find((installation) => isAgentsSkillPath(installation.entryPath));
+  const lock = skillLocks[skill.slug] ?? skillLocks[skill.displayName];
+  if (skillsShInstallation && lock) {
+    return {
+      label: "skills.sh 安装",
+      detail: formatSourceDetail(lock.sourceUrl || lock.source || skillsShInstallation.entryPath)
+    };
+  }
+
+  const pluginInstallation = skill.installations.find((installation) => pluginSourceDetail(installation.entryPath));
+  if (pluginInstallation) {
+    return {
+      label: "Plugin 安装",
+      detail: pluginSourceDetail(pluginInstallation.entryPath) ?? compactPath(pluginInstallation.entryPath)
+    };
+  }
+
+  const gitInstallation = skill.installations.find((installation) => installation.entryPath.includes("/.git/") || installation.rootPath.includes("/.git/"));
+  if (gitInstallation) {
+    return {
+      label: "Git 安装",
+      detail: compactPath(gitInstallation.entryPath)
+    };
+  }
+
+  const installation = firstValidInstallation(skill);
+  return {
+    label: "本地安装",
+    detail: compactPath(skill.canonicalPath ?? installation?.entryPath ?? skill.slug)
+  };
+}
+
+function isAgentsSkillPath(path: string) {
+  return /\/\.agents\/skills\/[^/]+$/.test(path);
+}
+
+function pluginSourceDetail(path: string) {
+  const claudeMarketplace = path.match(/\/\.claude\/plugins\/marketplaces\/([^/]+)/);
+  if (claudeMarketplace) return marketplaceRepositoryLabel(claudeMarketplace[1]);
+
+  const cursorMarketplace = path.match(/\/\.cursor\/plugins\/marketplaces\/([^/]+)/);
+  if (cursorMarketplace) return marketplaceRepositoryLabel(cursorMarketplace[1]);
+
+  const codexPlugin = path.match(/\/\.codex\/plugins\/cache\/([^/]+)\/([^/]+)/);
+  if (codexPlugin) return codexPluginRepositoryLabel(codexPlugin[1], codexPlugin[2]);
+
+  return null;
+}
+
+function marketplaceRepositoryLabel(name: string) {
+  const repositories: Record<string, string> = {
+    "anthropic-agent-skills": "github.com/anthropics/skills",
+    "axton-obsidian-visual-skills": "github.com/axtonliu/axton-obsidian-visual-skills",
+    "caicai-skills": "github.com/nextcaicai/caicai-skills",
+    "claude-plugins-official": "github.com/anthropics/claude-plugins-official",
+    "dontbesilent-skills": "github.com/dontbesilent2025/dbskill"
+  };
+  return repositories[name] ?? name;
+}
+
+function codexPluginRepositoryLabel(marketplace: string, name: string) {
+  const repositories: Record<string, string> = {
+    "build-ios-apps": "github.com/openai/plugins",
+    browser: "openai-bundled/browser",
+    chrome: "openai-bundled/chrome",
+    hyperframes: "github.com/heygen-com/hyperframes",
+    remotion: "github.com/remotion-dev/remotion"
+  };
+  return repositories[name] ?? `${marketplace}/${name}`;
+}
+
+function formatSourceDetail(value: string) {
+  return compactPath(value.replace(/^https?:\/\//, "").replace(/^git@github\.com:/, "github.com/").replace(/\.git$/, ""));
+}
+
+function compactPath(path: string) {
+  return path.replace(/^\/Users\/[^/]+/, "~");
+}
+
 function projectSkillsForFolder(skills: SkillRecord[], folder: string | null): SkillRecord[] {
   if (!folder) return [];
   const projectSkills: SkillRecord[] = [];
@@ -1559,6 +1668,13 @@ const demoInventory: InventorySnapshot = {
   scannedAt: new Date().toISOString(),
   appDataPath: "/Users/example/Library/Application Support/oh-my-skills",
   libraryPath: "/Users/example/.oh-my-skills/library"
+};
+
+const demoSkillLocks: Record<string, SkillLockEntry> = {
+  browser: {
+    sourceType: "github",
+    sourceUrl: "https://github.com/example/browser-skills.git"
+  }
 };
 
 function demoAgent(id: string, label: string, status: string, count: number, kinds: string[]): AgentRecord {
