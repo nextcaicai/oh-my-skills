@@ -422,8 +422,12 @@ fn parse_frontmatter(raw: &str) -> SkillFrontmatter {
         metadata: BTreeMap::new(),
     };
     let mut section: Option<String> = None;
+    let lines = raw.lines().collect::<Vec<_>>();
+    let mut index = 0;
 
-    for line in raw.lines() {
+    while index < lines.len() {
+        let line = lines[index];
+        index += 1;
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
@@ -453,7 +457,13 @@ fn parse_frontmatter(raw: &str) -> SkillFrontmatter {
 
         match key {
             "name" => fm.name = Some(clean_scalar(value)),
-            "description" => fm.description = Some(clean_scalar(value)),
+            "description" => {
+                fm.description = if matches!(value, "|" | ">") {
+                    Some(read_block_scalar(&lines, &mut index, value == ">"))
+                } else {
+                    Some(clean_scalar(value))
+                }
+            }
             "license" => fm.license = Some(clean_scalar(value)),
             "allowed-tools" => {
                 if value.is_empty() {
@@ -473,6 +483,27 @@ fn parse_frontmatter(raw: &str) -> SkillFrontmatter {
     }
 
     fm
+}
+
+fn read_block_scalar(lines: &[&str], index: &mut usize, folded: bool) -> String {
+    let mut block = Vec::new();
+
+    while *index < lines.len() {
+        let line = lines[*index];
+        if !line.trim().is_empty() && !line.starts_with(' ') && !line.starts_with('\t') {
+            break;
+        }
+        *index += 1;
+        block.push(line.trim().to_string());
+    }
+
+    if folded {
+        block.join(" ")
+    } else {
+        block.join("\n")
+    }
+    .trim()
+    .to_string()
 }
 
 fn split_key_value(line: &str) -> Option<(&str, &str)> {
@@ -540,6 +571,20 @@ mod tests {
             frontmatter.metadata.get("tags").map(String::as_str),
             Some("writing, translation")
         );
+        assert_eq!(body, "# Body");
+    }
+
+    #[test]
+    fn parses_literal_block_description() {
+        let input = "---\nname: dbs-action\ndescription: |\n  第一行描述。\n  第二行触发方式。\nlicense: MIT\n---\n# Body";
+        let (frontmatter, body) = parse_skill_markdown(input);
+        let frontmatter = frontmatter.expect("frontmatter");
+
+        assert_eq!(
+            frontmatter.description.as_deref(),
+            Some("第一行描述。\n第二行触发方式。")
+        );
+        assert_eq!(frontmatter.license.as_deref(), Some("MIT"));
         assert_eq!(body, "# Body");
     }
 

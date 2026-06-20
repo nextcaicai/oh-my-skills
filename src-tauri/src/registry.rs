@@ -3,7 +3,6 @@ use crate::models::{
     AgentDefinition, AgentDetectionSource, AgentRecord, CustomRoot, ProjectWorkspaceAgentRoot,
     ProjectWorkspaceCandidate, ResolvedRoot, Settings,
 };
-use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -948,7 +947,6 @@ fn installed_plugin_skill_roots_for_agent(agent_id: &str) -> Vec<PathBuf> {
 
     match agent_id {
         "claude-code" => {
-            collect_claude_installed_plugin_skill_roots(&mut roots, &mut seen);
             collect_recursive_skill_roots(
                 &mut roots,
                 &mut seen,
@@ -980,36 +978,6 @@ fn installed_plugin_skill_roots_for_agent(agent_id: &str) -> Vec<PathBuf> {
 }
 
 const PLUGIN_SKILL_DISCOVERY_DEPTH: usize = 8;
-
-fn collect_claude_installed_plugin_skill_roots(
-    roots: &mut Vec<PathBuf>,
-    seen: &mut BTreeSet<String>,
-) {
-    let path = expand_home("~/.claude/plugins/installed_plugins.json");
-    let Ok(text) = fs::read_to_string(&path) else {
-        return;
-    };
-    let Ok(value) = serde_json::from_str::<Value>(&text) else {
-        return;
-    };
-    let Some(plugins) = value.get("plugins").and_then(Value::as_object) else {
-        return;
-    };
-
-    for installs in plugins.values().filter_map(Value::as_array) {
-        for install in installs {
-            let Some(install_path) = install.get("installPath").and_then(Value::as_str) else {
-                continue;
-            };
-            collect_recursive_skill_roots(
-                roots,
-                seen,
-                expand_home(install_path).join("skills"),
-                PLUGIN_SKILL_DISCOVERY_DEPTH,
-            );
-        }
-    }
-}
 
 fn collect_codex_enabled_plugin_skill_roots(roots: &mut Vec<PathBuf>, seen: &mut BTreeSet<String>) {
     let config = expand_home("~/.codex/config.toml");
