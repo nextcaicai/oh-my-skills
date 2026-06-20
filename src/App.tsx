@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowRight,
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Circle,
@@ -912,7 +911,6 @@ function SkillsView({
           <div className="skill-table-head">
             <span />
             <span>Skill</span>
-            <span>Skill 来源</span>
             <span>Agent 覆盖</span>
           </div>
 
@@ -934,8 +932,7 @@ function SkillsView({
                     <SkillDetail
                       skill={skill}
                       settings={settings}
-                      selected={selectedSkillIds.has(skill.id)}
-                      onToggle={() => onToggleSkill(skill.id)}
+                      skillLocks={skillLocks}
                       onAdopt={() => onAdopt(skill)}
                       onSelectForSync={() => onSelectForSync(skill)}
                     />
@@ -1000,23 +997,22 @@ function SkillRow({
         {checked ? <Check size={14} /> : <Circle size={13} />}
       </button>
       <button className="skill-row-main" onClick={onSelect} type="button">
-        <strong>{skill.displayName}</strong>
-        <span>{skill.description || skill.slug}</span>
+        <strong>
+          {active ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+          <span className="skill-name-text">{skill.displayName}</span>
+          <SourceOwnerTag skill={skill} skillLocks={skillLocks} />
+        </strong>
+        <span className="skill-row-description">{skill.description || skill.slug}</span>
       </button>
-      <SkillSourceCell skill={skill} skillLocks={skillLocks} />
       <SkillAgentStack skill={skill} agents={agents} />
     </article>
   );
 }
 
-function SkillSourceCell({ skill, skillLocks }: { skill: SkillRecord; skillLocks: Record<string, SkillLockEntry> }) {
+function SourceOwnerTag({ skill, skillLocks }: { skill: SkillRecord; skillLocks: Record<string, SkillLockEntry> }) {
   const source = skillSourceSummary(skill, skillLocks);
-  return (
-    <div className="skill-source-cell" title={`${source.label}\n${source.detail}`}>
-      <strong>{source.label}</strong>
-      <span>{source.detail}</span>
-    </div>
-  );
+  if (!source.owner) return null;
+  return <em title={source.detail}>{source.owner}</em>;
 }
 
 function SkillAgentStack({ skill, agents }: { skill: SkillRecord; agents: AgentRecord[] }) {
@@ -1043,37 +1039,51 @@ function SkillAgentStack({ skill, agents }: { skill: SkillRecord; agents: AgentR
 function SkillDetail({
   skill,
   settings,
-  selected,
-  onToggle,
+  skillLocks,
   onAdopt,
   onSelectForSync
 }: {
   skill: SkillRecord;
   settings: AppSettings;
-  selected: boolean;
-  onToggle: () => void;
+  skillLocks: Record<string, SkillLockEntry>;
   onAdopt: () => void;
   onSelectForSync: () => void;
 }) {
   const canAdopt = skill.canonicalStatus !== "imported" && Boolean(firstValidInstallation(skill));
+  const source = skillSourceSummary(skill, skillLocks);
+  const sourceInstallation = firstValidInstallation(skill);
+  const localPath = skill.canonicalPath ?? sourceInstallation?.entryPath ?? "";
 
   return (
     <div className="skill-detail">
-      <div className="detail-title">
-        <span className="detail-icon">
-          <FileText size={20} />
-        </span>
-        <div>
-          <h2>{skill.displayName}</h2>
-          <p>{skill.slug}</p>
-        </div>
+      <p className="detail-description">{skill.description || skill.slug}</p>
+
+      <div className="detail-meta-grid">
+        {localPath && (
+          <DetailMeta label="本地路径">
+            <code title={localPath}>{settings.showRawPaths ? localPath : compactPath(localPath)}</code>
+          </DetailMeta>
+        )}
+        <DetailMeta label="来源">
+          <span>{source.label}</span>
+        </DetailMeta>
+        {source.githubUrl && (
+          <DetailMeta label="GitHub">
+            <a href={source.githubUrl} rel="noreferrer" target="_blank">
+              {source.detail}
+            </a>
+          </DetailMeta>
+        )}
       </div>
 
+      {skill.issues.length > 0 && (
+        <section className="detail-section issue-section">
+          <h3>问题</h3>
+          <IssueList issues={skill.issues} />
+        </section>
+      )}
+
       <div className="detail-actions">
-        <button className={`secondary-button ${selected ? "selected" : ""}`} onClick={onToggle}>
-          <CheckCircle2 size={16} />
-          {selected ? "已加入同步" : "选择"}
-        </button>
         <button className="secondary-button" disabled={!canAdopt} onClick={onAdopt}>
           <Layers3 size={16} />
           导入中心库
@@ -1083,37 +1093,15 @@ function SkillDetail({
           去同步
         </button>
       </div>
+    </div>
+  );
+}
 
-      <div className="detail-summary">
-        <InfoBlock label="状态" value={skill.conflict ? "内容冲突" : skill.canonicalStatus === "imported" ? "已导入" : "外部来源"} />
-        <InfoBlock label="安装位置" value={`${skill.installations.length} 个`} />
-        <InfoBlock label="缺失 Agent" value={`${skill.missingAgents.length} 个`} />
-      </div>
-
-      <section className="detail-section install-section">
-        <h3>安装在</h3>
-        <div className="install-list">
-          {skill.installations.map((installation) => (
-            <div className="install-row" key={installation.id}>
-              <AgentBadge label={installation.agentLabel} status={installation.status} />
-              <span className="install-scope">{installation.scope === "global" ? "全局" : installation.scope}</span>
-              {installation.isSymlink && <Link2 size={14} />}
-              <code title={installation.entryPath}>
-                {settings.showRawPaths ? installation.entryPath : compactPath(installation.entryPath)}
-              </code>
-            </div>
-          ))}
-          {skill.installations.length === 0 && <span className="muted">没有检测到安装入口。</span>}
-        </div>
-      </section>
-
-      {skill.issues.length > 0 && (
-        <section className="detail-section issue-section">
-          <h3>问题</h3>
-          <IssueList issues={skill.issues} />
-        </section>
-      )}
-
+function DetailMeta({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="detail-meta">
+      <span>{label}</span>
+      {children}
     </div>
   );
 }
@@ -1426,32 +1414,44 @@ function skillSourceSummary(skill: SkillRecord, skillLocks: Record<string, Skill
   const skillsShInstallation = skill.installations.find((installation) => isAgentsSkillPath(installation.entryPath));
   const lock = skillLocks[skill.slug] ?? skillLocks[skill.displayName];
   if (skillsShInstallation && lock) {
+    const detail = formatSourceDetail(lock.sourceUrl || lock.source || skillsShInstallation.entryPath);
     return {
       label: "skills.sh 安装",
-      detail: formatSourceDetail(lock.sourceUrl || lock.source || skillsShInstallation.entryPath)
+      detail,
+      owner: sourceOwner(detail),
+      githubUrl: githubUrlFromDetail(detail)
     };
   }
 
   const pluginInstallation = skill.installations.find((installation) => pluginSourceDetail(installation.entryPath));
   if (pluginInstallation) {
+    const detail = pluginSourceDetail(pluginInstallation.entryPath) ?? compactPath(pluginInstallation.entryPath);
     return {
       label: "Plugin 安装",
-      detail: pluginSourceDetail(pluginInstallation.entryPath) ?? compactPath(pluginInstallation.entryPath)
+      detail,
+      owner: sourceOwner(detail),
+      githubUrl: githubUrlFromDetail(detail)
     };
   }
 
   const gitInstallation = skill.installations.find((installation) => installation.entryPath.includes("/.git/") || installation.rootPath.includes("/.git/"));
   if (gitInstallation) {
+    const detail = compactPath(gitInstallation.entryPath);
     return {
       label: "Git 安装",
-      detail: compactPath(gitInstallation.entryPath)
+      detail,
+      owner: sourceOwner(detail),
+      githubUrl: githubUrlFromDetail(detail)
     };
   }
 
   const installation = firstValidInstallation(skill);
+  const detail = compactPath(skill.canonicalPath ?? installation?.entryPath ?? skill.slug);
   return {
     label: "本地安装",
-    detail: compactPath(skill.canonicalPath ?? installation?.entryPath ?? skill.slug)
+    detail,
+    owner: sourceOwner(detail),
+    githubUrl: githubUrlFromDetail(detail)
   };
 }
 
@@ -1496,6 +1496,20 @@ function codexPluginRepositoryLabel(marketplace: string, name: string) {
 
 function formatSourceDetail(value: string) {
   return compactPath(value.replace(/^https?:\/\//, "").replace(/^git@github\.com:/, "github.com/").replace(/\.git$/, ""));
+}
+
+function sourceOwner(detail: string) {
+  const github = detail.match(/^github\.com\/([^/]+)/);
+  if (github) return github[1];
+
+  const bundled = detail.match(/^(openai-bundled|openai-curated)(?:\/|$)/);
+  if (bundled) return bundled[1];
+
+  return null;
+}
+
+function githubUrlFromDetail(detail: string) {
+  return detail.startsWith("github.com/") ? `https://${detail}` : null;
 }
 
 function compactPath(path: string) {
