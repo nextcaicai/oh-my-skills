@@ -135,6 +135,13 @@ export type SkillLockEntry = {
   updatedAt?: string;
 };
 
+export type SkillUpdateCheck = {
+  status: string;
+  message?: string;
+  localHash?: string;
+  remoteHash?: string;
+};
+
 export type InstallationRef = {
   installationId: string;
   entryPath: string;

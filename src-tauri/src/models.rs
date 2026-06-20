@@ -197,6 +197,15 @@ pub struct SkillLockFile {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct SkillUpdateCheck {
+    pub status: String,
+    pub message: Option<String>,
+    pub local_hash: Option<String>,
+    pub remote_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct SkillContent {
     pub path: String,
     pub title: String,

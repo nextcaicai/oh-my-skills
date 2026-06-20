@@ -6,10 +6,11 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Circle,
   CopyCheck,
   FileText,
+  FolderOpen,
   FolderPlus,
+  Github,
   Globe2,
   Layers3,
   Link2,
@@ -33,6 +34,8 @@ import type {
   SkillIssue,
   SkillLockEntry,
   SkillRecord,
+  SkillUpdateCheck,
+  SyncOperation,
   SyncPlan
 } from "./types";
 
@@ -62,6 +65,8 @@ export default function App() {
   const [discoveryBasePath, setDiscoveryBasePath] = useState<string | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(new Set());
+  const [skillUpdateChecks, setSkillUpdateChecks] = useState<Record<string, SkillUpdateCheck>>({});
+  const [updatingSkillIds, setUpdatingSkillIds] = useState<Set<string>>(new Set());
   const [syncPlan, setSyncPlan] = useState<SyncPlan | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [busy, setBusy] = useState("启动中");
@@ -141,6 +146,10 @@ export default function App() {
     [allSkills, selectedSkillIds]
   );
 
+  useEffect(() => {
+    void refreshSkillsShUpdateChecks(allSkills, skillLocks);
+  }, [inventory?.scannedAt, skillLocks]);
+
   async function boot() {
     setBusy("读取设置");
     setError(null);
@@ -175,6 +184,7 @@ export default function App() {
         options: { includeOrphaned: false }
       });
       setInventory(next);
+      setSkillUpdateChecks({});
       setSelectedSkillId((current) => {
         if (current && next.skills.some((skill) => skill.id === current)) return current;
         return null;
@@ -429,6 +439,63 @@ export default function App() {
     setView("sync");
   }
 
+  async function refreshSkillsShUpdateChecks(skills: SkillRecord[], locks: Record<string, SkillLockEntry>) {
+    if (!isTauriRuntime() || skills.length === 0) return;
+    for (const skill of skills) {
+      const source = skillsShUpdateSource(skill, locks);
+      if (!source) continue;
+      setSkillUpdateChecks((current) => {
+        if (current[skill.id]) return current;
+        return { ...current, [skill.id]: { status: "checking" } };
+      });
+      try {
+        const result = await invoke<SkillUpdateCheck>("check_skills_sh_update", {
+          slug: skill.slug,
+          entryPath: source.installation.entryPath,
+          sourceUrl: source.sourceUrl,
+          skillPath: source.lock.skillPath ?? null
+        });
+        setSkillUpdateChecks((current) => ({ ...current, [skill.id]: result }));
+      } catch (reason) {
+        setSkillUpdateChecks((current) => ({
+          ...current,
+          [skill.id]: failedUpdateCheck(reason)
+        }));
+      }
+    }
+  }
+
+  async function updateSkillsShSkill(skill: SkillRecord) {
+    const source = skillsShUpdateSource(skill, skillLocks);
+    if (!source) return;
+    setBusy(`更新 ${skill.displayName}`);
+    setError(null);
+    setUpdatingSkillIds((current) => new Set(current).add(skill.id));
+    try {
+      const result = await invoke<SkillUpdateCheck>("update_skills_sh_skill", {
+        slug: skill.slug,
+        entryPath: source.installation.entryPath,
+        sourceUrl: source.sourceUrl,
+        skillPath: source.lock.skillPath ?? null
+      });
+      setSkillUpdateChecks((current) => ({ ...current, [skill.id]: result }));
+      await refreshInventory();
+    } catch (reason) {
+      setError(String(reason));
+      setSkillUpdateChecks((current) => ({
+        ...current,
+        [skill.id]: failedUpdateCheck(reason)
+      }));
+    } finally {
+      setUpdatingSkillIds((current) => {
+        const next = new Set(current);
+        next.delete(skill.id);
+        return next;
+      });
+      setBusy("");
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="top-nav">
@@ -469,6 +536,8 @@ export default function App() {
             installedCount={installedAgents.length}
             busy={busy}
             onAgentClick={openAgentSkills}
+            onGoSkills={() => setView("skills")}
+            onRefresh={() => void refreshInventory()}
           />
         )}
 
@@ -479,6 +548,8 @@ export default function App() {
             allSkills={allSkills}
             sourceSkills={visibleSourceSkills}
             skillLocks={skillLocks}
+            skillUpdateChecks={skillUpdateChecks}
+            updatingSkillIds={updatingSkillIds}
             workspace={skillWorkspace}
             projectFolders={projectFolders}
             selectedProjectFolder={selectedProjectFolder}
@@ -506,6 +577,7 @@ export default function App() {
             }}
             onSelectSkill={setSelectedSkillId}
             onToggleSkill={toggleSkill}
+            onUpdateSkill={updateSkillsShSkill}
             onAdopt={previewAdopt}
             onSelectForSync={selectForSync}
             onRefresh={() => void refreshInventory()}
@@ -580,22 +652,38 @@ function AgentsView({
   skills,
   installedCount,
   busy,
-  onAgentClick
+  onAgentClick,
+  onGoSkills,
+  onRefresh
 }: {
   agents: AgentRecord[];
   skills: SkillRecord[];
   installedCount: number;
   busy: string;
   onAgentClick: (agent: AgentRecord) => void;
+  onGoSkills: () => void;
+  onRefresh: () => void;
 }) {
-  const [agentViewFilter, setAgentViewFilter] = useState<AgentViewFilter>("all");
+  const [agentViewFilter, setAgentViewFilter] = useState<AgentViewFilter>("installed");
   const visibleAgents = agentViewFilter === "installed" ? agents.filter((agent) => agent.installed) : agents;
+  const issueCount = skills.reduce((total, skill) => total + skill.issues.length + (skill.conflict ? 1 : 0), 0);
   const summary = agentViewFilter === "all"
     ? `内置 ${agents.length} 个 Agent 的自动检测识别`
     : busy || `已发现 Agent ${installedCount} 个 · Skills ${skills.length} 个`;
+  const primaryLabel = skills.length > 0 ? "查看已发现 Skills" : "重新扫描";
+  const primaryAction = skills.length > 0 ? onGoSkills : onRefresh;
 
   return (
     <div className="agents-page">
+      <section className="agent-status-strip" aria-label="扫描状态">
+        <InfoBlock label="已安装 Agent" value={`${installedCount}`} />
+        <InfoBlock label="已发现 Skills" value={`${skills.length}`} />
+        <InfoBlock label="需检查" value={`${issueCount}`} />
+        <button className="primary-button" onClick={primaryAction} type="button">
+          {busy ? <Loader2 className="spin" size={16} /> : <ArrowRight size={16} />}
+          {busy || primaryLabel}
+        </button>
+      </section>
       <div className="agent-filter-tabs" role="tablist" aria-label="Agent 过滤">
         <button
           className={agentViewFilter === "all" ? "active" : ""}
@@ -645,6 +733,13 @@ function AgentsView({
             </button>
           );
         })}
+        {visibleAgents.length === 0 && (
+          <div className="empty-list">
+            <ShieldCheck size={28} />
+            <strong>还没有检测到已安装 Agent</strong>
+            <span>可以重新扫描，或切到“全部”查看 Oh My Skills 支持的 Agent。</span>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -656,6 +751,8 @@ function SkillsView({
   allSkills,
   sourceSkills,
   skillLocks,
+  skillUpdateChecks,
+  updatingSkillIds,
   workspace,
   projectFolders,
   selectedProjectFolder,
@@ -673,6 +770,7 @@ function SkillsView({
   onSelectProject,
   onSelectSkill,
   onToggleSkill,
+  onUpdateSkill,
   onAdopt,
   onSelectForSync,
   onRefresh,
@@ -686,6 +784,8 @@ function SkillsView({
   allSkills: SkillRecord[];
   sourceSkills: SkillRecord[];
   skillLocks: Record<string, SkillLockEntry>;
+  skillUpdateChecks: Record<string, SkillUpdateCheck>;
+  updatingSkillIds: Set<string>;
   workspace: SkillWorkspace;
   projectFolders: string[];
   selectedProjectFolder: string | null;
@@ -703,6 +803,7 @@ function SkillsView({
   onSelectProject: (folder: string) => void;
   onSelectSkill: (id: string | null) => void;
   onToggleSkill: (id: string) => void;
+  onUpdateSkill: (skill: SkillRecord) => void;
   onAdopt: (skill: SkillRecord) => void;
   onSelectForSync: (skill: SkillRecord) => void;
   onRefresh: () => void;
@@ -911,6 +1012,7 @@ function SkillsView({
           <div className="skill-table-head">
             <span />
             <span>Skill</span>
+            <span>状态</span>
             <span>Agent 覆盖</span>
           </div>
 
@@ -925,8 +1027,11 @@ function SkillsView({
                     skillLocks={skillLocks}
                     active={expanded}
                     checked={selectedSkillIds.has(skill.id)}
+                    updateCheck={skillUpdateChecks[skill.id]}
+                    updating={updatingSkillIds.has(skill.id)}
                     onSelect={() => onSelectSkill(expanded ? null : skill.id)}
                     onToggle={() => onToggleSkill(skill.id)}
+                    onUpdate={() => onUpdateSkill(skill)}
                   />
                   {expanded && (
                     <SkillDetail
@@ -972,30 +1077,40 @@ function SkillRow({
   skillLocks,
   active,
   checked,
+  updateCheck,
+  updating,
   onSelect,
-  onToggle
+  onToggle,
+  onUpdate
 }: {
   skill: SkillRecord;
   agents: AgentRecord[];
   skillLocks: Record<string, SkillLockEntry>;
   active: boolean;
   checked: boolean;
+  updateCheck?: SkillUpdateCheck;
+  updating: boolean;
   onSelect: () => void;
   onToggle: () => void;
+  onUpdate: () => void;
 }) {
   return (
     <article className={`skill-row ${active ? "active" : ""}`} onClick={onSelect}>
-      <button
-        className={`select-dot ${checked ? "checked" : ""}`}
+      <label
+        className={`select-checkbox ${checked ? "checked" : ""}`}
         onClick={(event) => {
           event.stopPropagation();
-          onToggle();
         }}
         title="选择同步"
-        type="button"
       >
-        {checked ? <Check size={14} /> : <Circle size={13} />}
-      </button>
+        <input
+          aria-label={`选择同步 ${skill.displayName}`}
+          checked={checked}
+          onChange={onToggle}
+          type="checkbox"
+        />
+        <span>{checked && <Check size={14} />}</span>
+      </label>
       <button className="skill-row-main" onClick={onSelect} type="button">
         <strong>
           <span className="skill-name-text">{skill.displayName}</span>
@@ -1004,8 +1119,55 @@ function SkillRow({
         </strong>
         <span className="skill-row-description">{skill.description || skill.slug}</span>
       </button>
+      <SkillStatusCell
+        skill={skill}
+        skillLocks={skillLocks}
+        updateCheck={updateCheck}
+        updating={updating}
+        onUpdate={onUpdate}
+      />
       <SkillAgentStack skill={skill} agents={agents} />
     </article>
+  );
+}
+
+function SkillStatusCell({
+  skill,
+  skillLocks,
+  updateCheck,
+  updating,
+  onUpdate
+}: {
+  skill: SkillRecord;
+  skillLocks: Record<string, SkillLockEntry>;
+  updateCheck?: SkillUpdateCheck;
+  updating: boolean;
+  onUpdate: () => void;
+}) {
+  const status = skillListStatus(skill, skillLocks, updateCheck);
+  const title = updateCheck?.message ?? status.title;
+
+  if (status.kind === "update") {
+    return (
+      <button
+        className={`skill-status-badge ${status.kind}`}
+        disabled={updating}
+        onClick={(event) => {
+          event.stopPropagation();
+          onUpdate();
+        }}
+        title={title}
+        type="button"
+      >
+        {updating ? "更新中" : status.label}
+      </button>
+    );
+  }
+
+  return (
+    <span className={`skill-status-badge ${status.kind}`} title={title}>
+      {status.label}
+    </span>
   );
 }
 
@@ -1056,54 +1218,79 @@ function SkillDetail({
 
   return (
     <div className="skill-detail">
-      <p className="detail-description">{skill.description || skill.slug}</p>
+      {localPath && (
+        <DetailField label="本地路径">
+          <code title={localPath}>{settings.showRawPaths ? localPath : compactPath(localPath)}</code>
+          <button
+            className="meta-icon-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void openPath(localPath);
+            }}
+            title="打开本地路径"
+            type="button"
+          >
+            <FolderOpen size={15} />
+          </button>
+        </DetailField>
+      )}
 
-      <div className="detail-meta-grid">
-        {localPath && (
-          <DetailMeta label="本地路径">
-            <code title={localPath}>{settings.showRawPaths ? localPath : compactPath(localPath)}</code>
-          </DetailMeta>
-        )}
-        <DetailMeta label="来源">
-          <span>{source.label}</span>
-        </DetailMeta>
-        {source.githubUrl && (
-          <DetailMeta label="GitHub">
-            <a href={source.githubUrl} rel="noreferrer" target="_blank">
-              {source.detail}
-            </a>
-          </DetailMeta>
-        )}
-      </div>
+      <DetailField label="描述">
+        <p>{skill.description || skill.slug}</p>
+      </DetailField>
+
+      {source.githubUrl && (
+        <DetailField label="来源">
+          <code title={source.githubUrl}>{source.detail}</code>
+          <button
+            className="meta-icon-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void openUrl(source.githubUrl);
+            }}
+            title="打开 GitHub 仓库"
+            type="button"
+          >
+            <Github size={15} />
+          </button>
+        </DetailField>
+      )}
 
       {skill.issues.length > 0 && (
-        <section className="detail-section issue-section">
-          <h3>问题</h3>
+        <DetailField label="问题">
           <IssueList issues={skill.issues} />
-        </section>
+        </DetailField>
       )}
 
       <div className="detail-actions">
         <button className="secondary-button" disabled={!canAdopt} onClick={onAdopt}>
-          <Layers3 size={16} />
           导入中心库
         </button>
         <button className="primary-button" onClick={onSelectForSync}>
-          <ArrowRight size={16} />
-          去同步
+          加入同步队列
         </button>
       </div>
     </div>
   );
 }
 
-function DetailMeta({ label, children }: { label: string; children: ReactNode }) {
+function DetailField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="detail-meta">
+    <div className="detail-field">
       <span>{label}</span>
-      {children}
+      <div>{children}</div>
     </div>
   );
+}
+
+async function openPath(path: string) {
+  if (!isTauriRuntime()) return;
+  await invoke("open_path", { path });
+}
+
+async function openUrl(url: string | null) {
+  if (!url || !isTauriRuntime()) return;
+  await invoke("open_url", { url });
 }
 
 function SyncView({
@@ -1138,6 +1325,8 @@ function SyncView({
     ? agents.filter((agent) => agent.projectRoots.length > 0).map((agent) => ({ agentId: agent.id, scope: "project" }))
     : [{ agentId: targetAgentId, scope: "project" }];
   const blocked = Boolean(plan?.blockedConflicts.length);
+  const summary = plan ? syncPlanSummary(plan) : null;
+  const groups = plan ? groupedOperations(plan.operations, agents) : [];
 
   return (
     <div className="sync-page">
@@ -1220,6 +1409,28 @@ function SyncView({
 
         {plan && (
           <>
+            {summary && (
+              <div className="sync-summary-grid" aria-label="同步摘要">
+                <InfoBlock label="创建" value={`${summary.create}`} />
+                <InfoBlock label="覆盖/移除" value={`${summary.overwrite}`} />
+                <InfoBlock label="备份" value={`${summary.backup}`} />
+                <InfoBlock label="软链接" value={`${summary.symlink}`} />
+                <InfoBlock label="跳过" value={`${summary.noop}`} />
+                <InfoBlock label="阻塞" value={`${plan.blockedConflicts.length}`} />
+              </div>
+            )}
+            {plan.preconditions.length > 0 && (
+              <div className="precondition-note">
+                <strong>执行前会先确认</strong>
+                <span>{plan.preconditions.join(" · ")}</span>
+              </div>
+            )}
+            {summary && summary.backup > 0 && (
+              <div className="restore-note">
+                <ShieldCheck size={17} />
+                <span>计划会先把目标位置的现有内容移动到备份路径；如需恢复，可将备份内容复制回对应目标路径。</span>
+              </div>
+            )}
             {blocked && (
               <div className="banner warning">
                 <AlertTriangle size={17} />
@@ -1227,17 +1438,33 @@ function SyncView({
               </div>
             )}
             <div className="operation-list">
-              {plan.operations.map((operation) => (
-                <div className={`operation ${operation.status}`} key={operation.id}>
-                  <StatusIcon status={operation.status} />
-                  <div>
-                    <strong>{operation.message}</strong>
-                    <small>{operation.opType}</small>
-                    {operation.sourcePath && <code>from {operation.sourcePath}</code>}
-                    {operation.targetPath && <code>to {operation.targetPath}</code>}
-                    {operation.backupPath && <code>backup {operation.backupPath}</code>}
+              {groups.map((group) => (
+                <section className="operation-group" key={group.key}>
+                  <div className="operation-group-heading">
+                    <strong>{group.title}</strong>
+                    <span>{group.operations.length} 项操作</span>
                   </div>
-                </div>
+                  {group.operations.map((operation) => (
+                    <div className={`operation ${operation.status}`} key={operation.id}>
+                      <StatusIcon status={operation.status} />
+                      <div>
+                        <strong>{operation.message}</strong>
+                        <small>{operationTypeLabel(operation.opType)} · {operationStatusLabel(operation.status)}</small>
+                        {(operation.sourcePath || operation.targetPath || operation.backupPath) && (
+                          <details className="operation-paths">
+                            <summary>查看路径与恢复信息</summary>
+                            {operation.sourcePath && <code>来源 {operation.sourcePath}</code>}
+                            {operation.targetPath && <code>目标 {operation.targetPath}</code>}
+                            {operation.backupPath && <code>备份 {operation.backupPath}</code>}
+                            {operation.backupPath && operation.targetPath && (
+                              <span>恢复方式：把备份路径内容复制回目标路径。</span>
+                            )}
+                          </details>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </section>
               ))}
             </div>
           </>
@@ -1275,8 +1502,8 @@ function SettingsSheet({
       <aside className="settings-sheet">
         <div className="pane-title">
           <div>
-            <h1>Logo 入口</h1>
-            <p>先放设置，后续可以接关于和更新。</p>
+            <h1>工作区设置</h1>
+            <p>配置中心库、项目工作区和路径显示方式。</p>
           </div>
           <button className="icon-button" onClick={onClose} title="关闭">
             <XCircle size={17} />
@@ -1286,6 +1513,7 @@ function SettingsSheet({
         <label className="field">
           <span>中心库</span>
           <input value={settings.libraryPath} onChange={(event) => onChange({ ...settings, libraryPath: event.target.value })} />
+          <small>中心库用于保存规范 Skill 副本；同步时会从这里链接或复制到目标 Agent。</small>
         </label>
         <label className="switch-row">
           <input
@@ -1399,20 +1627,120 @@ function IssueList({ issues }: { issues: SkillIssue[] }) {
       {issues.map((issue, index) => (
         <div className={`issue ${issue.severity}`} key={`${issue.code}-${index}`}>
           <AlertTriangle size={14} />
-          <span>{issue.message}</span>
+          <span>
+            <strong>{issue.message}</strong>
+            <small>{issueActionHint(issue)}</small>
+          </span>
         </div>
       ))}
     </div>
   );
 }
 
+function issueActionHint(issue: SkillIssue) {
+  if (issue.code === "broken-symlink") return "建议修复断开的软链接后再同步。";
+  if (issue.code === "content-conflict") return "建议先选择一个规范来源，避免覆盖不同内容。";
+  if (issue.code === "missing-skill-md") return "建议确认目录是否为有效 Skill。";
+  if (issue.code === "name-mismatch") return "建议统一目录名和 frontmatter name。";
+  return issue.path ? `位置：${issue.path}` : "建议先检查这个 Skill 的来源和安装状态。";
+}
+
+function syncPlanSummary(plan: SyncPlan) {
+  return plan.operations.reduce(
+    (summary, operation) => {
+      if (operation.opType === "create-root") summary.create += 1;
+      if (operation.opType === "copy-to-library") summary.create += 1;
+      if (operation.opType === "remove-existing") summary.overwrite += 1;
+      if (operation.opType === "backup-existing") {
+        summary.backup += 1;
+        summary.overwrite += 1;
+      }
+      if (operation.opType === "create-symlink") summary.symlink += 1;
+      if (operation.opType === "noop" || operation.status === "noop") summary.noop += 1;
+      return summary;
+    },
+    { create: 0, overwrite: 0, backup: 0, symlink: 0, noop: 0 }
+  );
+}
+
+function groupedOperations(operations: SyncOperation[], agents: AgentRecord[]) {
+  const groups = new Map<string, { key: string; title: string; operations: SyncOperation[] }>();
+  operations.forEach((operation) => {
+    const agent = operation.agentId ? agents.find((item) => item.id === operation.agentId) : null;
+    const scope = inferOperationScope(operation, agent);
+    const title = agent ? `${agent.label} · ${scope === "project" ? "项目" : "全局"}` : "中心库 / 准备操作";
+    const key = `${agent?.id ?? "library"}:${scope}`;
+    if (!groups.has(key)) groups.set(key, { key, title, operations: [] });
+    groups.get(key)?.operations.push(operation);
+  });
+  return Array.from(groups.values());
+}
+
+function inferOperationScope(operation: SyncOperation, agent: AgentRecord | null | undefined) {
+  if (!agent || !operation.targetPath) return "library";
+  if (agent.projectRoots.some((root) => root && operation.targetPath?.startsWith(root))) return "project";
+  return "global";
+}
+
+function operationTypeLabel(opType: string) {
+  const labels: Record<string, string> = {
+    noop: "无需操作",
+    "copy-to-library": "复制到中心库",
+    "create-root": "创建根目录",
+    "remove-existing": "移除现有项",
+    "backup-existing": "备份现有项",
+    "create-symlink": "创建软链接"
+  };
+  return labels[opType] ?? opType;
+}
+
+function operationStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    noop: "跳过",
+    planned: "计划中",
+    blocked: "已阻塞"
+  };
+  return labels[status] ?? status;
+}
+
 function firstValidInstallation(skill: SkillRecord): SkillInstallation | null {
   return skill.installations.find((installation) => installation.status !== "invalid" && !installation.brokenSymlink) ?? null;
 }
 
+function skillListStatus(
+  skill: SkillRecord,
+  skillLocks: Record<string, SkillLockEntry>,
+  updateCheck?: SkillUpdateCheck
+) {
+  if (
+    skill.conflict ||
+    skill.issues.length > 0 ||
+    skill.installations.some((installation) => installation.brokenSymlink || installation.status === "invalid" || installation.status === "broken")
+  ) {
+    return { kind: "check", label: "需检查", title: "检测到内容冲突、缺失文件或无效安装入口" };
+  }
+
+  const agentsSkill = skill.installations.some((installation) => isAgentsSkillPath(installation.entryPath));
+  if (agentsSkill && !skillsShLock(skill, skillLocks)) {
+    return { kind: "check", label: "需检查", title: "skills.sh 安装缺少 lock 信息，无法判断来源和更新" };
+  }
+
+  if (updateCheck?.status === "available") {
+    return { kind: "update", label: "可更新", title: "发现 skills.sh 来源有新内容，点击更新" };
+  }
+  if (updateCheck?.status === "checking") {
+    return { kind: "checking", label: "检查中", title: "正在检查 skills.sh 来源是否有更新" };
+  }
+  if (updateCheck?.status === "check-failed") {
+    return { kind: "ok", label: "可用", title: updateCheck.message ?? "更新检查失败，不影响当前可用性" };
+  }
+
+  return { kind: "ok", label: "可用", title: "当前未发现明显问题" };
+}
+
 function skillSourceSummary(skill: SkillRecord, skillLocks: Record<string, SkillLockEntry>) {
   const skillsShInstallation = skill.installations.find((installation) => isAgentsSkillPath(installation.entryPath));
-  const lock = skillLocks[skill.slug] ?? skillLocks[skill.displayName];
+  const lock = skillsShLock(skill, skillLocks);
   if (skillsShInstallation && lock) {
     const detail = formatSourceDetail(lock.sourceUrl || lock.source || skillsShInstallation.entryPath);
     return {
@@ -1455,8 +1783,26 @@ function skillSourceSummary(skill: SkillRecord, skillLocks: Record<string, Skill
   };
 }
 
+function skillsShUpdateSource(skill: SkillRecord, skillLocks: Record<string, SkillLockEntry>) {
+  const installation = skill.installations.find((item) => isAgentsSkillPath(item.entryPath));
+  const lock = skillsShLock(skill, skillLocks);
+  const sourceUrl = lock?.sourceUrl || lock?.source;
+  if (!installation || !lock || !sourceUrl) return null;
+  return { installation, lock, sourceUrl };
+}
+
+function skillsShLock(skill: SkillRecord, skillLocks: Record<string, SkillLockEntry>) {
+  return skillLocks[skill.slug] ?? skillLocks[skill.displayName];
+}
+
+const AGENTS_SKILL_PATH_REGEX = /\/\.agents\/skills\/[^/]+$/;
+
 function isAgentsSkillPath(path: string) {
-  return /\/\.agents\/skills\/[^/]+$/.test(path);
+  return AGENTS_SKILL_PATH_REGEX.test(path);
+}
+
+function failedUpdateCheck(reason: unknown): SkillUpdateCheck {
+  return { status: "check-failed", message: String(reason) };
 }
 
 function pluginSourceDetail(path: string) {
