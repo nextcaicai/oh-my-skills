@@ -71,7 +71,6 @@ p {
   padding: 16px 24px 10px;
 }
 
-.logo-entry,
 .tab-bar,
 .top-actions,
 .tab-button,
@@ -82,28 +81,8 @@ p {
   align-items: center;
 }
 
-.logo-entry {
-  justify-self: start;
-  gap: 8px;
-  min-height: 36px;
-  padding: 3px 11px 3px 4px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.68);
-  color: #17202e;
-  cursor: pointer;
-}
-
-.logo-mark {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border-radius: 50%;
-  background: #ffffff;
-  color: #123b5c;
-}
-
 .tab-bar {
+  grid-column: 2;
   justify-self: center;
   gap: 3px;
   padding: 4px;
@@ -133,6 +112,7 @@ p {
 }
 
 .top-actions {
+  grid-column: 3;
   justify-self: end;
   gap: 6px;
 }
@@ -793,7 +773,7 @@ p {
   display: grid;
   flex: 1;
   min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr) minmax(190px, 0.46fr);
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid rgba(30, 54, 83, 0.12);
   border-radius: 8px;
@@ -842,6 +822,10 @@ p {
 .skill-row.active,
 .skill-row:hover {
   background: rgba(25, 111, 145, 0.08);
+}
+
+.skill-row.active {
+  border-bottom-color: transparent;
 }
 
 .select-dot {
@@ -980,13 +964,16 @@ p {
 
 .skill-detail {
   display: grid;
-  grid-template-columns: minmax(220px, 0.74fr) 116px minmax(230px, 0.72fr) minmax(180px, 0.58fr) minmax(320px, 1.08fr);
+  grid-template-columns: minmax(220px, 0.72fr) 116px minmax(230px, 0.72fr) minmax(260px, 1fr);
   gap: 12px;
   align-items: start;
   min-height: 0;
   overflow: hidden;
-  padding: 14px 18px;
-  border-top: 1px solid rgba(30, 54, 83, 0.14);
+  margin: 0 0 8px 34px;
+  padding: 14px;
+  border: 1px solid rgba(30, 54, 83, 0.12);
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
   background: rgba(246, 250, 252, 0.82);
 }
 
@@ -1093,9 +1080,19 @@ p {
   padding: 4px 6px;
 }
 
-.install-row span:nth-child(2) {
+.install-row .install-scope {
+  flex: 0 0 auto;
   color: rgba(23, 32, 46, 0.58);
   font-size: 11px;
+}
+
+.install-row code {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(23, 32, 46, 0.58);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .issue-list {
@@ -1115,29 +1112,6 @@ p {
   padding: 7px 8px;
   border-radius: 8px;
   background: rgba(21, 58, 91, 0.07);
-}
-
-.markdown-section {
-  grid-row: span 2;
-}
-
-.markdown-preview {
-  max-height: 148px;
-  margin: 0;
-  overflow: auto;
-  padding: 10px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.58);
-  color: #355066;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-.skill-inspector-empty {
-  min-height: 190px;
-  border-top: 1px solid rgba(30, 54, 83, 0.12);
 }
 
 .sync-page {

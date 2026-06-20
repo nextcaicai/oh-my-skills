@@ -6,6 +6,7 @@ use crate::models::{
 use crate::registry::{detect_agents, resolve_roots};
 use crate::settings::{app_data_dir, load_settings};
 use chrono::Utc;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -20,19 +21,21 @@ pub fn scan(app: &AppHandle, options: ScanOptions) -> Result<InventorySnapshot, 
 
     let mut all_issues = Vec::new();
     let canonical = scan_canonical_library(&library_path, &mut all_issues)?;
-    let mut grouped: BTreeMap<String, Vec<SkillInstallation>> = BTreeMap::new();
+    let mut grouped: BTreeMap<SkillGroupKey, Vec<SkillInstallation>> = BTreeMap::new();
 
     for root in &roots {
         scan_root(root, &library_path, &mut grouped, &mut all_issues)?;
     }
 
-    let mut slugs: BTreeSet<String> = canonical.keys().cloned().collect();
-    slugs.extend(grouped.keys().cloned());
+    let mut keys: BTreeSet<SkillGroupKey> = canonical.keys().cloned().collect();
+    keys.extend(grouped.keys().cloned());
+    let duplicated_slugs = duplicated_slugs(&keys);
 
     let mut skills = Vec::new();
-    for slug in slugs {
-        let installations = grouped.remove(&slug).unwrap_or_default();
-        let canonical_install = canonical.get(&slug);
+    for key in keys {
+        let slug = key.slug.clone();
+        let installations = dedupe_installations(grouped.remove(&key).unwrap_or_default());
+        let canonical_install = canonical.get(&key);
         let mut issues = installations
             .iter()
             .flat_map(|installation| installation.issues.clone())
@@ -90,7 +93,11 @@ pub fn scan(app: &AppHandle, options: ScanOptions) -> Result<InventorySnapshot, 
             });
 
         skills.push(SkillRecord {
-            id: slug.clone(),
+            id: if duplicated_slugs.contains(&slug) {
+                format!("{}@{}", slug, short_fingerprint(&key.identity))
+            } else {
+                slug.clone()
+            },
             slug,
             display_name,
             description,
@@ -165,7 +172,7 @@ pub fn read_skill_content(skill_ref: crate::models::SkillRef) -> Result<SkillCon
 fn scan_canonical_library(
     library_path: &Path,
     issues: &mut Vec<SkillIssue>,
-) -> Result<BTreeMap<String, SkillInstallation>, String> {
+) -> Result<BTreeMap<SkillGroupKey, SkillInstallation>, String> {
     let mut canonical = BTreeMap::new();
     if !library_path.exists() {
         return Ok(canonical);
@@ -206,7 +213,8 @@ fn scan_canonical_library(
         for issue in &installation.issues {
             issues.push(issue.clone());
         }
-        canonical.insert(slug, installation);
+        let key = group_key(&slug, &installation);
+        canonical.insert(key, installation);
     }
     Ok(canonical)
 }
@@ -214,7 +222,7 @@ fn scan_canonical_library(
 fn scan_root(
     root: &ResolvedRoot,
     library_path: &Path,
-    grouped: &mut BTreeMap<String, Vec<SkillInstallation>>,
+    grouped: &mut BTreeMap<SkillGroupKey, Vec<SkillInstallation>>,
     issues: &mut Vec<SkillIssue>,
 ) -> Result<(), String> {
     let root_path = PathBuf::from(&root.path);
@@ -235,7 +243,8 @@ fn scan_root(
         for issue in &installation.issues {
             issues.push(issue.clone());
         }
-        grouped.entry(slug).or_default().push(installation);
+        let key = group_key(&slug, &installation);
+        grouped.entry(key).or_default().push(installation);
         return Ok(());
     }
 
@@ -266,10 +275,55 @@ fn scan_root(
         for issue in &installation.issues {
             issues.push(issue.clone());
         }
-        grouped.entry(slug).or_default().push(installation);
+        let key = group_key(&slug, &installation);
+        grouped.entry(key).or_default().push(installation);
     }
 
     Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct SkillGroupKey {
+    slug: String,
+    identity: String,
+}
+
+fn group_key(slug: &str, installation: &SkillInstallation) -> SkillGroupKey {
+    SkillGroupKey {
+        slug: slug.to_string(),
+        identity: installation
+            .real_path
+            .clone()
+            .unwrap_or_else(|| installation.entry_path.clone()),
+    }
+}
+
+fn duplicated_slugs(keys: &BTreeSet<SkillGroupKey>) -> BTreeSet<String> {
+    let mut counts = BTreeMap::<String, usize>::new();
+    for key in keys {
+        *counts.entry(key.slug.clone()).or_default() += 1;
+    }
+    counts
+        .into_iter()
+        .filter_map(|(slug, count)| (count > 1).then_some(slug))
+        .collect()
+}
+
+fn dedupe_installations(installations: Vec<SkillInstallation>) -> Vec<SkillInstallation> {
+    let mut seen = BTreeSet::new();
+    installations
+        .into_iter()
+        .filter(|installation| seen.insert(installation.id.clone()))
+        .collect()
+}
+
+fn short_fingerprint(value: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(value.as_bytes());
+    format!("{:x}", hasher.finalize())
+        .chars()
+        .take(12)
+        .collect()
 }
 
 fn is_hidden_skill_entry(path: &Path) -> bool {
@@ -649,8 +703,61 @@ mod tests {
 
         scan_root(&root, temp.path(), &mut grouped, &mut issues).expect("scan root");
 
-        assert!(grouped.contains_key("direct-skill"));
+        assert!(grouped.keys().any(|key| key.slug == "direct-skill"));
         assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn separates_same_slug_from_different_paths() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let root_a = temp.path().join("agent-a-skills");
+        let root_b = temp.path().join("agent-b-skills");
+        let skill_a = root_a.join("frontend-design");
+        let skill_b = root_b.join("frontend-design");
+        fs::create_dir_all(&skill_a).expect("skill a dir");
+        fs::create_dir_all(&skill_b).expect("skill b dir");
+        fs::write(
+            skill_a.join("SKILL.md"),
+            "---\nname: frontend-design\ndescription: Plugin copy\n---\nBody A",
+        )
+        .expect("skill a md");
+        fs::write(
+            skill_b.join("SKILL.md"),
+            "---\nname: frontend-design\ndescription: Local copy\n---\nBody B",
+        )
+        .expect("skill b md");
+
+        let root_a = ResolvedRoot {
+            agent_id: "claude".to_string(),
+            agent_label: "Claude Code".to_string(),
+            scope: "global".to_string(),
+            path: path_to_string(&root_a),
+            exists: true,
+            active: true,
+            orphaned: false,
+        };
+        let root_b = ResolvedRoot {
+            agent_id: "cursor".to_string(),
+            agent_label: "Cursor".to_string(),
+            scope: "global".to_string(),
+            path: path_to_string(&root_b),
+            exists: true,
+            active: true,
+            orphaned: false,
+        };
+        let mut grouped = BTreeMap::new();
+        let mut issues = Vec::new();
+
+        scan_root(&root_a, temp.path(), &mut grouped, &mut issues).expect("scan root a");
+        scan_root(&root_b, temp.path(), &mut grouped, &mut issues).expect("scan root b");
+
+        assert_eq!(
+            grouped
+                .keys()
+                .filter(|key| key.slug == "frontend-design")
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -681,8 +788,8 @@ mod tests {
 
         scan_root(&root, temp.path(), &mut grouped, &mut issues).expect("scan root");
 
-        assert!(grouped.contains_key("visible-skill"));
-        assert!(!grouped.contains_key(".system"));
+        assert!(grouped.keys().any(|key| key.slug == "visible-skill"));
+        assert!(!grouped.keys().any(|key| key.slug == ".system"));
         assert!(issues.iter().all(|issue| {
             issue
                 .path

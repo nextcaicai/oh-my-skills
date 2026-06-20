@@ -15,15 +15,13 @@ import {
   Layers3,
   Link2,
   Loader2,
-  MonitorCheck,
   RefreshCw,
   Search,
   Settings,
   ShieldCheck,
-  Sparkles,
   XCircle
 } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { agentIconAsset } from "./agentIconRegistry";
 import type {
   AgentRecord,
@@ -32,7 +30,6 @@ import type {
   InventorySnapshot,
   ProjectWorkspaceCandidate,
   Settings as AppSettings,
-  SkillContent,
   SkillInstallation,
   SkillIssue,
   SkillLockEntry,
@@ -66,7 +63,6 @@ export default function App() {
   const [discoveryBasePath, setDiscoveryBasePath] = useState<string | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(new Set());
-  const [skillContent, setSkillContent] = useState<SkillContent | null>(null);
   const [syncPlan, setSyncPlan] = useState<SyncPlan | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [busy, setBusy] = useState("启动中");
@@ -137,7 +133,7 @@ export default function App() {
   }, [agentFilter, query, visibleSourceSkills]);
 
   const selectedSkill = useMemo(
-    () => filteredSkills.find((skill) => skill.id === selectedSkillId) ?? filteredSkills[0] ?? null,
+    () => selectedSkillId ? filteredSkills.find((skill) => skill.id === selectedSkillId) ?? null : null,
     [filteredSkills, selectedSkillId]
   );
 
@@ -145,15 +141,6 @@ export default function App() {
     () => allSkills.filter((skill) => selectedSkillIds.has(skill.id)),
     [allSkills, selectedSkillIds]
   );
-
-  useEffect(() => {
-    if (!selectedSkill) {
-      setSkillContent(null);
-      return;
-    }
-    setSelectedSkillId(selectedSkill.id);
-    void loadSkillContent(selectedSkill);
-  }, [selectedSkill?.id]);
 
   async function boot() {
     setBusy("读取设置");
@@ -163,7 +150,7 @@ export default function App() {
       setDraftSettings(defaultSettings);
       setSkillLocks(demoSkillLocks);
       setInventory(demoInventory);
-      setSelectedSkillId(demoInventory.skills[0]?.id ?? null);
+      setSelectedSkillId(null);
       setBusy("");
       return;
     }
@@ -191,7 +178,7 @@ export default function App() {
       setInventory(next);
       setSelectedSkillId((current) => {
         if (current && next.skills.some((skill) => skill.id === current)) return current;
-        return next.skills[0]?.id ?? null;
+        return null;
       });
       setSelectedSkillIds((current) => {
         const valid = new Set(next.skills.map((skill) => skill.id));
@@ -213,39 +200,6 @@ export default function App() {
     setSkillLocks(locks);
   }
 
-  async function loadSkillContent(skill: SkillRecord) {
-    const path = skill.canonicalPath ?? firstValidInstallation(skill)?.entryPath;
-    if (!path) {
-      setSkillContent(null);
-      return;
-    }
-
-    if (!isTauriRuntime()) {
-      setSkillContent({
-        path,
-        title: skill.displayName,
-        frontmatter: {
-          name: skill.displayName,
-          description: skill.description,
-          allowedTools: [],
-          metadata: {}
-        },
-        content: `---\nname: ${skill.displayName}\ndescription: ${skill.description ?? skill.slug}\n---\n\n# ${skill.displayName}\n\n${skill.description ?? "Demo skill content for browser preview."}\n\nThis preview data is only used outside the Tauri runtime.`,
-        markdownBody: `# ${skill.displayName}\n\n${skill.description ?? ""}`
-      });
-      return;
-    }
-
-    try {
-      const content = await invoke<SkillContent>("read_skill_content", {
-        skillRef: { skillId: skill.id, installationId: null, path }
-      });
-      setSkillContent(content);
-    } catch {
-      setSkillContent(null);
-    }
-  }
-
   async function previewSkillsSync(skills = queuedSkills, targets: AgentTarget[] = []) {
     const skill = skills[0];
     if (!skill) return;
@@ -262,7 +216,7 @@ export default function App() {
       const validInstall = firstValidInstallation(skill);
       const plan = skill.canonicalStatus === "imported"
         ? await invoke<SyncPlan>("preview_sync", {
-            skillId: skill.id,
+            skillId: skill.slug,
             targets
           })
         : await invoke<SyncPlan>("preview_sync_from_installation", {
@@ -479,21 +433,14 @@ export default function App() {
   return (
     <main className="app-shell">
       <header className="top-nav">
-        <button className="logo-entry" onClick={() => setSettingsOpen(true)} title="设置、关于和更新">
-          <span className="logo-mark">
-            <Sparkles size={18} />
-          </span>
-          <span>Oh My Skills</span>
-        </button>
-
         <nav className="tab-bar" aria-label="主导航">
-          <TabButton active={view === "agents"} onClick={() => setView("agents")} icon={<MonitorCheck size={17} />}>
+          <TabButton active={view === "agents"} onClick={() => setView("agents")}>
             发现 Agent
           </TabButton>
-          <TabButton active={view === "skills"} onClick={() => setView("skills")} icon={<Layers3 size={17} />}>
+          <TabButton active={view === "skills"} onClick={() => setView("skills")}>
             发现 Skills
           </TabButton>
-          <TabButton active={view === "sync"} onClick={() => setView("sync")} icon={<ShieldCheck size={17} />}>
+          <TabButton active={view === "sync"} onClick={() => setView("sync")}>
             同步 Skills
           </TabButton>
         </nav>
@@ -541,7 +488,6 @@ export default function App() {
             discovering={busy === "扫描发现项目工作区"}
             selectedSkill={selectedSkill}
             selectedSkillIds={selectedSkillIds}
-            skillContent={skillContent}
             query={query}
             agentFilter={agentFilter}
             settings={settings}
@@ -616,18 +562,15 @@ function isTauriRuntime() {
 
 function TabButton({
   active,
-  icon,
   children,
   onClick
 }: {
   active: boolean;
-  icon: ReactNode;
   children: ReactNode;
   onClick: () => void;
 }) {
   return (
     <button className={`tab-button ${active ? "active" : ""}`} onClick={onClick}>
-      {icon}
       <span>{children}</span>
     </button>
   );
@@ -722,7 +665,6 @@ function SkillsView({
   discovering,
   selectedSkill,
   selectedSkillIds,
-  skillContent,
   query,
   agentFilter,
   settings,
@@ -753,7 +695,6 @@ function SkillsView({
   discovering: boolean;
   selectedSkill: SkillRecord | null;
   selectedSkillIds: Set<string>;
-  skillContent: SkillContent | null;
   query: string;
   agentFilter: string;
   settings: AppSettings;
@@ -761,7 +702,7 @@ function SkillsView({
   onAgentFilter: (value: string) => void;
   onWorkspace: (value: SkillWorkspace) => void;
   onSelectProject: (folder: string) => void;
-  onSelectSkill: (id: string) => void;
+  onSelectSkill: (id: string | null) => void;
   onToggleSkill: (id: string) => void;
   onAdopt: (skill: SkillRecord) => void;
   onSelectForSync: (skill: SkillRecord) => void;
@@ -976,18 +917,32 @@ function SkillsView({
           </div>
 
           <div className="skill-list">
-            {skills.map((skill) => (
-              <SkillRow
-                key={skill.id}
-                skill={skill}
-                agents={agents}
-                skillLocks={skillLocks}
-                active={selectedSkill?.id === skill.id}
-                checked={selectedSkillIds.has(skill.id)}
-                onSelect={() => onSelectSkill(skill.id)}
-                onToggle={() => onToggleSkill(skill.id)}
-              />
-            ))}
+            {skills.map((skill) => {
+              const expanded = selectedSkill?.id === skill.id;
+              return (
+                <Fragment key={skill.id}>
+                  <SkillRow
+                    skill={skill}
+                    agents={agents}
+                    skillLocks={skillLocks}
+                    active={expanded}
+                    checked={selectedSkillIds.has(skill.id)}
+                    onSelect={() => onSelectSkill(expanded ? null : skill.id)}
+                    onToggle={() => onToggleSkill(skill.id)}
+                  />
+                  {expanded && (
+                    <SkillDetail
+                      skill={skill}
+                      settings={settings}
+                      selected={selectedSkillIds.has(skill.id)}
+                      onToggle={() => onToggleSkill(skill.id)}
+                      onAdopt={() => onAdopt(skill)}
+                      onSelectForSync={() => onSelectForSync(skill)}
+                    />
+                  )}
+                </Fragment>
+              );
+            })}
             {skills.length === 0 && (
               <div className="empty-list">
                 <FileText size={28} />
@@ -1008,24 +963,6 @@ function SkillsView({
               </div>
             )}
           </div>
-
-          {selectedSkill ? (
-            <SkillDetail
-              skill={selectedSkill}
-              content={skillContent}
-              settings={settings}
-              selected={selectedSkillIds.has(selectedSkill.id)}
-              onToggle={() => onToggleSkill(selectedSkill.id)}
-              onAdopt={() => onAdopt(selectedSkill)}
-              onSelectForSync={() => onSelectForSync(selectedSkill)}
-            />
-          ) : (
-            <div className="empty-detail skill-inspector-empty">
-              <FileText size={34} />
-              <strong>选择一个 Skill</strong>
-              <span>这里会显示 SKILL.md、安装位置和同步入口。</span>
-            </div>
-          )}
         </div>
       </section>
     </div>
@@ -1105,7 +1042,6 @@ function SkillAgentStack({ skill, agents }: { skill: SkillRecord; agents: AgentR
 
 function SkillDetail({
   skill,
-  content,
   settings,
   selected,
   onToggle,
@@ -1113,14 +1049,12 @@ function SkillDetail({
   onSelectForSync
 }: {
   skill: SkillRecord;
-  content: SkillContent | null;
   settings: AppSettings;
   selected: boolean;
   onToggle: () => void;
   onAdopt: () => void;
   onSelectForSync: () => void;
 }) {
-  const currentPath = skill.canonicalPath ?? firstValidInstallation(skill)?.entryPath ?? "";
   const canAdopt = skill.canonicalStatus !== "imported" && Boolean(firstValidInstallation(skill));
 
   return (
@@ -1162,9 +1096,11 @@ function SkillDetail({
           {skill.installations.map((installation) => (
             <div className="install-row" key={installation.id}>
               <AgentBadge label={installation.agentLabel} status={installation.status} />
-              <span>{installation.scope === "global" ? "全局" : installation.scope}</span>
+              <span className="install-scope">{installation.scope === "global" ? "全局" : installation.scope}</span>
               {installation.isSymlink && <Link2 size={14} />}
-              {settings.showRawPaths && <code>{installation.entryPath}</code>}
+              <code title={installation.entryPath}>
+                {settings.showRawPaths ? installation.entryPath : compactPath(installation.entryPath)}
+              </code>
             </div>
           ))}
           {skill.installations.length === 0 && <span className="muted">没有检测到安装入口。</span>}
@@ -1178,11 +1114,6 @@ function SkillDetail({
         </section>
       )}
 
-      <section className="detail-section markdown-section">
-        <h3>SKILL.md</h3>
-        {currentPath && <code className="path-code">{currentPath}</code>}
-        {content ? <pre className="markdown-preview">{content.content}</pre> : <p className="muted">没有可读取的 SKILL.md。</p>}
-      </section>
     </div>
   );
 }
