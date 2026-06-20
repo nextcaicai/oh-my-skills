@@ -1012,8 +1012,8 @@ function SkillsView({
           <div className="skill-table-head">
             <span />
             <span>Skill</span>
-            <span>状态</span>
             <span>Agent 覆盖</span>
+            <span>状态</span>
           </div>
 
           <div className="skill-list">
@@ -1119,6 +1119,7 @@ function SkillRow({
         </strong>
         <span className="skill-row-description">{skill.description || skill.slug}</span>
       </button>
+      <SkillAgentStack skill={skill} agents={agents} />
       <SkillStatusCell
         skill={skill}
         skillLocks={skillLocks}
@@ -1126,7 +1127,6 @@ function SkillRow({
         updating={updating}
         onUpdate={onUpdate}
       />
-      <SkillAgentStack skill={skill} agents={agents} />
     </article>
   );
 }
