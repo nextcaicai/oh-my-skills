@@ -6,7 +6,7 @@ use crate::models::{
     AgentTarget, ApplyResult, InstallationRef, ScanOptions, SyncOperation, SyncPlan,
 };
 use crate::registry::{detect_agents, find_agent};
-use crate::scanner::{inspect_installation, scan};
+use crate::scanner::{inspect_installation, scan, write_library_index};
 use crate::settings::{app_data_dir, load_settings};
 use chrono::Utc;
 use std::fs;
@@ -392,7 +392,13 @@ pub fn apply_plan(app: &AppHandle, plan_id: String) -> Result<ApplyResult, Strin
 
     write_history(app, &plan, &applied_operations, &errors)?;
     if plan.kind == "adopt" && errors.is_empty() {
-        write_library_index(app)?;
+        let snapshot = scan(
+            app,
+            ScanOptions {
+                include_orphaned: false,
+            },
+        )?;
+        write_library_index(app, &snapshot)?;
     }
 
     Ok(ApplyResult {
@@ -660,31 +666,6 @@ fn write_history(
         format!(
             "Unable to write sync history {}: {error}",
             path_to_string(&path)
-        )
-    })
-}
-
-fn write_library_index(app: &AppHandle) -> Result<(), String> {
-    let settings = load_settings(app)?;
-    let snapshot = scan(
-        app,
-        ScanOptions {
-            include_orphaned: false,
-        },
-    )?;
-    let index_path = PathBuf::from(settings.library_path)
-        .parent()
-        .map(|parent| parent.join("index.json"))
-        .ok_or_else(|| "Library path has no parent".to_string())?;
-    if let Some(parent) = index_path.parent() {
-        ensure_dir(parent)?;
-    }
-    let text = serde_json::to_string_pretty(&snapshot.skills)
-        .map_err(|error| format!("Unable to serialize library index: {error}"))?;
-    fs::write(&index_path, text).map_err(|error| {
-        format!(
-            "Unable to write library index {}: {error}",
-            path_to_string(&index_path)
         )
     })
 }

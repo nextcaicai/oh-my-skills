@@ -489,7 +489,7 @@ fn resolve_roots_for_definitions(
             push_root(
                 &mut roots,
                 definition,
-                "plugin",
+                "global",
                 root,
                 installed,
                 include_orphaned,
@@ -949,15 +949,37 @@ fn installed_plugin_skill_roots_for_agent(agent_id: &str) -> Vec<PathBuf> {
     match agent_id {
         "claude-code" => {
             collect_claude_installed_plugin_skill_roots(&mut roots, &mut seen);
+            collect_recursive_skill_roots(
+                &mut roots,
+                &mut seen,
+                expand_home("~/.claude/plugins/marketplaces"),
+                PLUGIN_SKILL_DISCOVERY_DEPTH,
+            );
         }
         "codex" => {
             collect_codex_enabled_plugin_skill_roots(&mut roots, &mut seen);
+            collect_recursive_skill_roots(
+                &mut roots,
+                &mut seen,
+                expand_home("~/.codex/plugins/cache/openai-curated"),
+                PLUGIN_SKILL_DISCOVERY_DEPTH,
+            );
+        }
+        "cursor" => {
+            collect_recursive_skill_roots(
+                &mut roots,
+                &mut seen,
+                expand_home("~/.cursor/plugins/marketplaces"),
+                PLUGIN_SKILL_DISCOVERY_DEPTH,
+            );
         }
         _ => {}
     }
 
     roots
 }
+
+const PLUGIN_SKILL_DISCOVERY_DEPTH: usize = 8;
 
 fn collect_claude_installed_plugin_skill_roots(
     roots: &mut Vec<PathBuf>,
@@ -979,10 +1001,11 @@ fn collect_claude_installed_plugin_skill_roots(
             let Some(install_path) = install.get("installPath").and_then(Value::as_str) else {
                 continue;
             };
-            push_existing_skill_collection_root(
+            collect_recursive_skill_roots(
                 roots,
                 seen,
                 expand_home(install_path).join("skills"),
+                PLUGIN_SKILL_DISCOVERY_DEPTH,
             );
         }
     }
@@ -1002,10 +1025,7 @@ fn collect_codex_enabled_plugin_skill_roots(roots: &mut Vec<PathBuf>, seen: &mut
             .join(marketplace)
             .join(plugin);
 
-        push_existing_skill_collection_root(roots, seen, plugin_root.join("skills"));
-        for version in read_dir_paths(&plugin_root) {
-            push_existing_skill_collection_root(roots, seen, version.join("skills"));
-        }
+        collect_recursive_skill_roots(roots, seen, plugin_root, PLUGIN_SKILL_DISCOVERY_DEPTH);
     }
 }
 
@@ -1042,26 +1062,66 @@ fn parse_codex_plugin_table(line: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-fn push_existing_skill_collection_root(
+fn collect_recursive_skill_roots(
     roots: &mut Vec<PathBuf>,
     seen: &mut BTreeSet<String>,
     path: PathBuf,
+    max_depth: usize,
 ) {
-    if path.is_dir() && has_skill_entries(&path) {
-        push_unique_path(roots, seen, path);
+    collect_recursive_skill_roots_at(roots, seen, &path, 0, max_depth);
+}
+
+fn collect_recursive_skill_roots_at(
+    roots: &mut Vec<PathBuf>,
+    seen: &mut BTreeSet<String>,
+    path: &Path,
+    depth: usize,
+    max_depth: usize,
+) {
+    if !path.is_dir() {
+        return;
+    }
+
+    if path.join("SKILL.md").is_file() {
+        push_unique_path(roots, seen, path.to_path_buf());
+        return;
+    }
+
+    if depth >= max_depth {
+        return;
+    }
+
+    let Ok(entries) = fs::read_dir(path) else {
+        return;
+    };
+
+    for entry in entries.filter_map(Result::ok) {
+        let entry_path = entry.path();
+        if should_skip_skill_discovery_dir(&entry_path) {
+            continue;
+        }
+        let Ok(metadata) = fs::symlink_metadata(&entry_path) else {
+            continue;
+        };
+        if metadata.is_dir() {
+            collect_recursive_skill_roots_at(roots, seen, &entry_path, depth + 1, max_depth);
+        } else if metadata.file_type().is_symlink() && entry_path.join("SKILL.md").is_file() {
+            push_unique_path(roots, seen, entry_path);
+        }
     }
 }
 
-fn read_dir_paths(path: &Path) -> Vec<PathBuf> {
-    fs::read_dir(path)
-        .map(|entries| {
-            entries
-                .filter_map(Result::ok)
-                .map(|entry| entry.path())
-                .filter(|path| path.is_dir())
-                .collect()
-        })
-        .unwrap_or_default()
+fn should_skip_skill_discovery_dir(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return true;
+    };
+    if name.starts_with('.') {
+        return true;
+    }
+    matches!(
+        name,
+        "node_modules" | "target" | "dist" | "build" | "venv" | "__pycache__"
+    )
 }
 
 fn push_unique_name(names: &mut Vec<String>, seen: &mut BTreeSet<String>, name: String) {
@@ -1100,10 +1160,6 @@ fn count_root_entries(path: &Path) -> usize {
                 .count()
         })
         .unwrap_or(0)
-}
-
-fn has_skill_entries(path: &Path) -> bool {
-    count_root_entries(path) > 0
 }
 
 fn dedupe_roots(roots: Vec<ResolvedRoot>) -> Vec<ResolvedRoot> {
@@ -1251,7 +1307,44 @@ enabled = true
         .expect("skill md");
 
         assert_eq!(count_root_entries(temp.path()), 1);
-        assert!(has_skill_entries(temp.path()));
+    }
+
+    #[test]
+    fn recursive_plugin_discovery_collects_only_skill_directories() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let marketplace = temp.path().join("marketplace");
+        let skill = marketplace
+            .join("official")
+            .join("plugins")
+            .join("plugin-dev")
+            .join("skills")
+            .join("skill-development");
+        let non_skill = marketplace.join("official").join("plugins").join("plugin-dev");
+        let skipped = marketplace
+            .join("official")
+            .join("plugins")
+            .join("plugin-dev")
+            .join("node_modules")
+            .join("fake-skill");
+        fs::create_dir_all(&skill).expect("skill dir");
+        fs::create_dir_all(&skipped).expect("skipped dir");
+        fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: skill-development\ndescription: Skill\n---\nBody",
+        )
+        .expect("skill md");
+        fs::write(
+            skipped.join("SKILL.md"),
+            "---\nname: fake-skill\ndescription: Skip\n---\nBody",
+        )
+        .expect("skipped skill md");
+
+        let mut roots = Vec::new();
+        let mut seen = BTreeSet::new();
+        collect_recursive_skill_roots(&mut roots, &mut seen, marketplace, 8);
+
+        assert_eq!(roots, vec![skill]);
+        assert!(!roots.contains(&non_skill));
     }
 
     #[test]

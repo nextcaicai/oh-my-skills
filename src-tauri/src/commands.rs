@@ -21,12 +21,14 @@ pub fn scan_inventory(
     app: AppHandle,
     options: Option<ScanOptions>,
 ) -> Result<InventorySnapshot, String> {
-    scanner::scan(
+    let snapshot = scanner::scan(
         &app,
         options.unwrap_or(ScanOptions {
             include_orphaned: false,
         }),
-    )
+    )?;
+    scanner::write_library_index(&app, &snapshot)?;
+    Ok(snapshot)
 }
 
 #[tauri::command]

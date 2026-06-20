@@ -1,4 +1,4 @@
-use crate::fs_ops::{hash_dir, path_to_string, skill_slug_from_path};
+use crate::fs_ops::{ensure_dir, hash_dir, path_to_string, skill_slug_from_path};
 use crate::models::{
     InventorySnapshot, ResolvedRoot, ScanOptions, SkillContent, SkillFrontmatter,
     SkillInstallation, SkillIssue, SkillRecord,
@@ -116,6 +116,25 @@ pub fn scan(app: &AppHandle, options: ScanOptions) -> Result<InventorySnapshot, 
         scanned_at: Utc::now().to_rfc3339(),
         app_data_path: path_to_string(&app_data),
         library_path: path_to_string(&library_path),
+    })
+}
+
+pub fn write_library_index(app: &AppHandle, snapshot: &InventorySnapshot) -> Result<(), String> {
+    let settings = load_settings(app)?;
+    let index_path = PathBuf::from(settings.library_path)
+        .parent()
+        .map(|parent| parent.join("index.json"))
+        .ok_or_else(|| "Library path has no parent".to_string())?;
+    if let Some(parent) = index_path.parent() {
+        ensure_dir(parent)?;
+    }
+    let text = serde_json::to_string_pretty(&snapshot.skills)
+        .map_err(|error| format!("Unable to serialize library index: {error}"))?;
+    fs::write(&index_path, text).map_err(|error| {
+        format!(
+            "Unable to write library index {}: {error}",
+            path_to_string(&index_path)
+        )
     })
 }
 
