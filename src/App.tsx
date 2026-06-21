@@ -53,6 +53,18 @@ const defaultSettings: AppSettings = {
   language: "zh-CN"
 };
 
+const startupT0 =
+  typeof window !== "undefined"
+    ? (window as typeof window & { __OMS_STARTUP_T0?: number }).__OMS_STARTUP_T0 ?? performance.now()
+    : 0;
+
+function logStartup(phase: string, details: Record<string, unknown> = {}) {
+  console.info(`[OMS-startup] ${phase}`, {
+    elapsedMs: Math.round(performance.now() - startupT0),
+    ...details
+  });
+}
+
 export default function App() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [draftSettings, setDraftSettings] = useState<AppSettings>(defaultSettings);
@@ -152,6 +164,8 @@ export default function App() {
   );
 
   async function boot() {
+    const startedAt = performance.now();
+    logStartup("frontend.boot.start");
     setBusy("读取设置");
     setError(null);
     if (!isTauriRuntime()) {
@@ -161,27 +175,48 @@ export default function App() {
       setInventory(demoInventory);
       setSelectedSkillId(null);
       setBusy("");
+      logStartup("frontend.boot.demo-ready", {
+        durationMs: Math.round(performance.now() - startedAt)
+      });
       return;
     }
     try {
+      const settingsStartedAt = performance.now();
+      logStartup("frontend.boot.settings-and-lock.start");
       const [loaded, locks] = await Promise.all([
         invoke<AppSettings>("get_settings"),
         readSkillLocks()
       ]);
+      logStartup("frontend.boot.settings-and-lock.end", {
+        durationMs: Math.round(performance.now() - settingsStartedAt),
+        lockEntries: Object.keys(locks).length,
+        projectFolders: loaded.projectFolders.length,
+        customRoots: loaded.customRoots.length
+      });
       setSettings(loaded);
       setDraftSettings(loaded);
       setSkillLocks(locks);
       setBusy("");
+      logStartup("frontend.boot.first-usable", {
+        durationMs: Math.round(performance.now() - startedAt)
+      });
       window.setTimeout(() => {
+        logStartup("frontend.boot.background-scan.scheduled");
         void refreshInventory({ background: true });
       }, 0);
     } catch (reason) {
       setError(String(reason));
       setBusy("");
+      logStartup("frontend.boot.error", {
+        durationMs: Math.round(performance.now() - startedAt),
+        error: String(reason)
+      });
     }
   }
 
   async function refreshInventory(options: { background?: boolean } = {}) {
+    const startedAt = performance.now();
+    logStartup("frontend.scan.start", { background: Boolean(options.background) });
     setBusy(options.background ? "后台扫描本机 Agent 与 Skills" : "扫描本机 Agent 与 Skills");
     setError(null);
     try {
@@ -191,6 +226,14 @@ export default function App() {
           options: { includeOrphaned: false }
         })
       ]);
+      logStartup("frontend.scan.commands-resolved", {
+        durationMs: Math.round(performance.now() - startedAt),
+        lockEntries: Object.keys(locks).length,
+        agents: next.agents.length,
+        roots: next.roots.length,
+        skills: next.skills.length,
+        issues: next.issues.length
+      });
       setSkillLocks(locks);
       setInventory(next);
       setSkillUpdateChecks({});
@@ -204,8 +247,16 @@ export default function App() {
       });
     } catch (reason) {
       setError(String(reason));
+      logStartup("frontend.scan.error", {
+        durationMs: Math.round(performance.now() - startedAt),
+        error: String(reason)
+      });
     } finally {
       setBusy("");
+      logStartup("frontend.scan.end", {
+        durationMs: Math.round(performance.now() - startedAt),
+        background: Boolean(options.background)
+      });
     }
   }
 

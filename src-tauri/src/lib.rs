@@ -6,8 +6,19 @@ mod scanner;
 mod settings;
 mod sync_plan;
 
+use std::time::Instant;
+
 pub fn run() {
+    let started_at = Instant::now();
+    println!("[OMS-startup] rust.run.start elapsedMs=0");
     tauri::Builder::default()
+        .setup(move |_app| {
+            println!(
+                "[OMS-startup] rust.setup elapsedMs={}",
+                started_at.elapsed().as_millis()
+            );
+            Ok(())
+        })
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,

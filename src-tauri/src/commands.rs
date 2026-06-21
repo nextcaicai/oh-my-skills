@@ -9,11 +9,28 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Instant;
 use tauri::AppHandle;
 
 #[tauri::command]
 pub fn get_settings(app: AppHandle) -> Result<Settings, String> {
-    settings::load_settings(&app)
+    let started_at = Instant::now();
+    println!("[OMS-startup] command.get_settings.start");
+    let result = settings::load_settings(&app);
+    match &result {
+        Ok(settings) => println!(
+            "[OMS-startup] command.get_settings.end durationMs={} projectFolders={} customRoots={}",
+            started_at.elapsed().as_millis(),
+            settings.project_folders.len(),
+            settings.custom_roots.len()
+        ),
+        Err(error) => println!(
+            "[OMS-startup] command.get_settings.error durationMs={} error={}",
+            started_at.elapsed().as_millis(),
+            error
+        ),
+    }
+    result
 }
 
 #[tauri::command]
@@ -27,13 +44,33 @@ pub fn scan_inventory(
     app: AppHandle,
     options: Option<ScanOptions>,
 ) -> Result<InventorySnapshot, String> {
+    let started_at = Instant::now();
+    println!("[OMS-startup] command.scan_inventory.start");
+    let scan_started_at = Instant::now();
     let snapshot = scanner::scan(
         &app,
         options.unwrap_or(ScanOptions {
             include_orphaned: false,
         }),
     )?;
+    println!(
+        "[OMS-startup] command.scan_inventory.scan-complete durationMs={} agents={} roots={} skills={} issues={}",
+        scan_started_at.elapsed().as_millis(),
+        snapshot.agents.len(),
+        snapshot.roots.len(),
+        snapshot.skills.len(),
+        snapshot.issues.len()
+    );
+    let write_started_at = Instant::now();
     scanner::write_library_index(&app, &snapshot)?;
+    println!(
+        "[OMS-startup] command.scan_inventory.write-index-complete durationMs={}",
+        write_started_at.elapsed().as_millis()
+    );
+    println!(
+        "[OMS-startup] command.scan_inventory.end durationMs={}",
+        started_at.elapsed().as_millis()
+    );
     Ok(snapshot)
 }
 
@@ -53,8 +90,14 @@ pub fn read_skill_content(skill_ref: SkillRef) -> Result<SkillContent, String> {
 
 #[tauri::command]
 pub fn read_skill_lock() -> Result<BTreeMap<String, SkillLockEntry>, String> {
+    let started_at = Instant::now();
+    println!("[OMS-startup] command.read_skill_lock.start");
     let path = fs_ops::expand_home("~/.agents/.skill-lock.json");
     let Ok(text) = fs::read_to_string(&path) else {
+        println!(
+            "[OMS-startup] command.read_skill_lock.end durationMs={} entries=0 missing=true",
+            started_at.elapsed().as_millis()
+        );
         return Ok(BTreeMap::new());
     };
     let lock = serde_json::from_str::<SkillLockFile>(&text).map_err(|error| {
@@ -63,6 +106,11 @@ pub fn read_skill_lock() -> Result<BTreeMap<String, SkillLockEntry>, String> {
             fs_ops::path_to_string(&path)
         )
     })?;
+    println!(
+        "[OMS-startup] command.read_skill_lock.end durationMs={} entries={} missing=false",
+        started_at.elapsed().as_millis(),
+        lock.skills.len()
+    );
     Ok(lock.skills)
 }
 
