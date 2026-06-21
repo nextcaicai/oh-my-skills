@@ -909,6 +909,26 @@ function SkillsView({
 }) {
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const agentMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!agentMenuOpen) return undefined;
+    const onDocClick = (e: MouseEvent) => {
+      if (agentMenuRef.current && !agentMenuRef.current.contains(e.target as Node)) {
+        setAgentMenuOpen(false);
+      }
+    };
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAgentMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [agentMenuOpen]);
+
   const selectedAgentLabel = agentFilter === "all"
     ? "全部 Agent"
     : agents.find((agent) => agent.id === agentFilter)?.label ?? "全部 Agent";
@@ -975,8 +995,15 @@ function SkillsView({
             <button className="icon-button plain" onClick={onRefresh} title="重新扫描" type="button">
               <RefreshCw size={17} />
             </button>
-            <div className="agent-menu-wrap">
-              <button className="agent-menu-trigger" onClick={() => setAgentMenuOpen((open) => !open)} type="button">
+            <div className="agent-menu-wrap" ref={agentMenuRef}>
+              <button
+                className={`agent-menu-trigger ${agentMenuOpen ? "open" : ""}`}
+                onClick={() => {
+                  setSearchOpen(false);
+                  setAgentMenuOpen((open) => !open);
+                }}
+                type="button"
+              >
                 <span>{selectedAgentLabel}</span>
                 <ChevronDown size={14} />
               </button>
@@ -990,7 +1017,8 @@ function SkillsView({
                     }}
                     type="button"
                   >
-                    <span>全部 Agent</span>
+                    <span className="check-col">{agentFilter === "all" && <Check size={13} />}</span>
+                    <span className="menu-label">全部 Agent</span>
                     <strong>{sourceSkills.length}</strong>
                   </button>
                   {agents.map((agent) => (
@@ -1003,7 +1031,8 @@ function SkillsView({
                       }}
                       type="button"
                     >
-                      <span>{agent.label}</span>
+                      <span className="check-col">{agentFilter === agent.id && <Check size={13} />}</span>
+                      <span className="menu-label">{agent.label}</span>
                       <strong>{agentSkillCount(agent.id, sourceSkills)}</strong>
                     </button>
                   ))}
@@ -1423,6 +1452,7 @@ function SyncView({
   const [targetScope, setTargetScope] = useState<"global" | "project">("global");
   const [targetPickerOpen, setTargetPickerOpen] = useState(false);
   const [selectedTargetIds, setSelectedTargetIds] = useState<Set<string>>(() => new Set(agents.slice(0, 3).map((agent) => agent.id)));
+  const targetMenuRef = useRef<HTMLDivElement>(null);
   const selectedSkill = queuedSkills[0] ?? null;
   const selectedSource = selectedSkill ? firstValidInstallation(selectedSkill) : null;
 
@@ -1434,6 +1464,24 @@ function SyncView({
       return new Set(agents.slice(0, 3).map((agent) => agent.id));
     });
   }, [agents]);
+
+  useEffect(() => {
+    if (!targetPickerOpen) return undefined;
+    const onDocClick = (e: MouseEvent) => {
+      if (targetMenuRef.current && !targetMenuRef.current.contains(e.target as Node)) {
+        setTargetPickerOpen(false);
+      }
+    };
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTargetPickerOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [targetPickerOpen]);
 
   const selectedTargets = agents.filter((agent) => selectedTargetIds.has(agent.id));
   const availableTargets = agents.filter((agent) => !selectedTargetIds.has(agent.id));
@@ -1563,7 +1611,7 @@ function SyncView({
                       </button>
                     );
                   })}
-                  <div className="target-add-wrap">
+                  <div className="target-add-wrap" ref={targetMenuRef}>
                     <button className="target-add-button" onClick={() => setTargetPickerOpen((open) => !open)} type="button">
                       <FolderPlus size={16} />
                       添加
@@ -1805,9 +1853,18 @@ function SettingsSheet({
 
   const installedCount = agents.length;
 
+  // Close on backdrop click (blank area) and Esc
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onEsc);
+    return () => document.removeEventListener("keydown", onEsc);
+  }, [onClose]);
+
   return (
-    <div className="sheet-backdrop">
-      <aside className="settings-sheet" role="dialog" aria-modal="true">
+    <div className="sheet-backdrop" onClick={onClose}>
+      <aside className="settings-sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
           <div className="settings-tabs" role="tablist" aria-label="设置分类">
             <button
