@@ -1792,18 +1792,8 @@ p {
   padding: 14px;
 }
 
-.sync-mode-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.sync-mode-card,
 .choice-card,
 .selected-target-chip,
-.target-add-button,
-.selected-skill-card,
 .managed-library-card {
   display: flex;
   align-items: center;
@@ -1815,45 +1805,142 @@ p {
   color: var(--app-text);
 }
 
-.sync-mode-card {
-  min-height: 72px;
-  justify-content: flex-start;
-  padding: 14px 16px;
-  text-align: left;
-}
-
-.sync-mode-card.active,
 .choice-card.active {
-  background: rgba(24, 26, 29, 0.15);
-  border-color: rgba(24, 26, 29, 0.15);
+  background: rgba(255, 255, 255, 0.58);
+  border-color: rgba(24, 26, 29, 0.24);
 }
 
-.sync-mode-card > svg,
 .choice-card > svg,
 .managed-library-card > svg {
   flex: 0 0 auto;
   color: #555b63;
 }
 
-.sync-mode-card span,
 .choice-card span,
-.selected-skill-card span,
 .managed-library-card span {
   display: grid;
   min-width: 0;
   gap: 4px;
 }
 
-.selected-skill-list {
-  display: grid;
-  gap: 6px;
-  max-height: 168px;
-  overflow: auto;
+.selected-skill-shell {
+  position: relative;
+  min-width: 0;
 }
 
-.sync-mode-card strong,
+.selected-skill-list {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.selected-skill-list::-webkit-scrollbar {
+  display: none;
+}
+
+.selected-skill-shell.empty .selected-skill-list {
+  min-height: 52px;
+}
+
+.selected-skill-card {
+  display: flex;
+  flex: 0 0 244px;
+  align-items: center;
+  gap: 8px;
+  width: 244px;
+  min-height: 52px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(24, 26, 29, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--app-text);
+}
+
+.selected-skill-empty {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  color: rgba(23, 25, 28, 0.50);
+  font-size: 12px;
+}
+
+.selected-skill-card span {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.selected-skill-card strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-skill-card small {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(23, 25, 28, 0.58);
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-skill-remove {
+  display: grid;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid rgba(24, 26, 29, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.56);
+  color: rgba(23, 25, 28, 0.48);
+  cursor: pointer;
+}
+
+.selected-skill-remove:hover {
+  color: #9d2d24;
+}
+
+.selected-skill-scroll {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 1px solid rgba(24, 26, 29, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: rgba(23, 25, 28, 0.66);
+  box-shadow: 0 8px 22px rgba(22, 24, 26, 0.12);
+  cursor: pointer;
+}
+
+.selected-skill-scroll.left {
+  left: -10px;
+}
+
+.selected-skill-scroll.right {
+  right: -10px;
+}
+
 .choice-card strong,
-.selected-skill-card strong,
 .managed-library-card strong {
   display: flex;
   align-items: center;
@@ -1861,19 +1948,7 @@ p {
   font-size: 14px;
 }
 
-.sync-mode-card em {
-  padding: 3px 7px;
-  border-radius: 999px;
-  background: rgba(24, 26, 29, 0.09);
-  color: #2f3338;
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 850;
-}
-
-.sync-mode-card small,
-.choice-card small,
-.selected-skill-card small {
+.choice-card small {
   overflow: hidden;
   color: rgba(23, 25, 28, 0.58);
   font-size: 12px;
@@ -1882,15 +1957,25 @@ p {
   white-space: nowrap;
 }
 
+.sync-mode-tabs {
+  margin-bottom: 14px;
+}
+
+.sync-mode-tabs button {
+  min-width: 128px;
+}
+
+.sync-mode-tabs button:last-child {
+  min-width: 168px;
+}
+
 .sync-work-grid {
   display: grid;
   min-height: 0;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.44fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.sync-form-pane,
-.sync-confirm-pane {
+.sync-form-pane {
   min-height: 0;
   overflow: auto;
 }
@@ -1904,11 +1989,22 @@ p {
 .sync-confirm-pane {
   display: grid;
   align-content: start;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid rgba(24, 26, 29, 0.10);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.52);
+  gap: 8px;
+  padding: 2px 0 0;
+  overflow: visible;
+  background: transparent;
+}
+
+.sync-confirm-pane .pane-title {
+  display: none;
+}
+
+.sync-confirm-pane .sync-summary-grid {
+  display: none;
+}
+
+.sync-confirm-pane .precondition-note {
+  display: none;
 }
 
 .sync-section {
@@ -1919,9 +2015,17 @@ p {
 .sync-section-title {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   font-size: 14px;
   font-weight: 850;
+}
+
+.sync-section-title > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .sync-section-title span {
@@ -1934,24 +2038,29 @@ p {
   color: rgba(23, 25, 28, 0.72);
 }
 
-.selected-skill-card,
+.sync-section-icon-action {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(23, 25, 28, 0.62);
+  cursor: pointer;
+}
+
+.sync-section-icon-action:hover {
+  background: rgba(24, 26, 29, 0.08);
+  color: var(--app-text);
+}
+
 .managed-library-card {
   min-height: 66px;
   padding: 12px;
 }
 
-.selected-skill-card > span,
 .managed-library-card > span {
   flex: 1;
-}
-
-.selected-skill-card small i {
-  display: inline-block;
-  width: 1px;
-  height: 10px;
-  margin: 0 10px;
-  background: rgba(23, 25, 28, 0.22);
-  vertical-align: -1px;
 }
 
 .managed-library-card em {
@@ -1970,10 +2079,13 @@ p {
 }
 
 .option-grid.two {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
 }
 
 .choice-card {
+  width: 312px;
   min-height: 64px;
   justify-content: flex-start;
   padding: 12px;
@@ -1991,15 +2103,14 @@ p {
   gap: 8px;
 }
 
-.selected-target-chip,
-.target-add-button {
+.selected-target-chip {
   min-height: 46px;
   padding: 0 14px 0 10px;
 }
 
 .selected-target-chip {
-  background: rgba(24, 26, 29, 0.15);
-  border-color: rgba(24, 26, 29, 0.15);
+  background: rgba(255, 255, 255, 0.58);
+  border-color: rgba(24, 26, 29, 0.12);
   color: var(--app-text);
 }
 
@@ -2009,7 +2120,7 @@ p {
   height: 18px;
   padding: 2px;
   border-radius: 5px;
-  background: #555b63;
+  background: #2f6fed;
   color: #fff;
 }
 
@@ -2020,13 +2131,6 @@ p {
 
 .target-add-wrap {
   position: relative;
-}
-
-.target-add-button {
-  border-color: rgba(24, 26, 29, 0.14);
-  background: rgba(255, 255, 255, 0.76);
-  color: var(--app-text);
-  font-weight: 850;
 }
 
 .target-add-menu {
@@ -2089,15 +2193,20 @@ p {
 .confirm-summary {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  min-height: 76px;
-  padding: 14px;
+  min-height: 56px;
+  padding: 0 16px;
   border: 1px solid rgba(35, 139, 105, 0.18);
   border-radius: 10px;
-  background: rgba(35, 139, 105, 0.08);
+  background: rgba(35, 139, 105, 0.07);
   color: #116149;
   font-size: 14px;
   line-height: 1.45;
+}
+
+.confirm-summary strong {
+  flex: 1;
 }
 
 .confirm-summary.blocked {
@@ -2106,48 +2215,35 @@ p {
   color: #9d2d24;
 }
 
-.confirm-details,
 .confirm-note {
   border-radius: 8px;
-  background: rgba(24, 26, 29, 0.06);
-}
-
-.confirm-details {
-  padding: 10px 12px;
-}
-
-.confirm-details summary {
-  cursor: pointer;
-  color: #2f3338;
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.confirm-details > span {
-  display: block;
-  margin-top: 8px;
-  color: rgba(23, 25, 28, 0.66);
-  font-size: 12px;
-  line-height: 1.5;
+  background: rgba(24, 26, 29, 0.05);
 }
 
 .confirm-note {
-  display: grid;
-  gap: 6px;
-  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 4px;
+  background: transparent;
   color: rgba(23, 25, 28, 0.62);
   font-size: 12px;
   line-height: 1.55;
 }
 
 .confirm-note strong {
-  color: var(--app-text);
+  display: none;
+}
+
+.confirm-note span {
+  color: rgba(23, 25, 28, 0.50);
 }
 
 .sync-action-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   margin-top: 14px;
   padding: 14px 10px 0;
