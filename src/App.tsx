@@ -30,6 +30,7 @@ import type {
   AgentTarget,
   ApplyResult,
   InventorySnapshot,
+  InstallationRef,
   ProjectWorkspaceCandidate,
   Settings as AppSettings,
   SkillInstallation,
@@ -267,69 +268,21 @@ export default function App() {
   }
 
   async function previewSkillsSync(skills = queuedSkills, targets: AgentTarget[] = []) {
-    const skill = skills[0];
-    if (!skill) return;
+    const sources = syncSourcesForSkills(skills);
+    if (sources.length === 0) return;
     setBusy("生成同步预览");
     setError(null);
     setApplyResult(null);
     if (!isTauriRuntime()) {
-      setSyncPlan(demoPlan(skill, targets, "sync"));
+      setSyncPlan(demoBatchPlan(skills, targets, "batch-sync"));
       setView("sync");
       setBusy("");
       return;
     }
     try {
-      const validInstall = firstValidInstallation(skill);
-      const plan = skill.canonicalStatus === "imported"
-        ? await invoke<SyncPlan>("preview_sync", {
-            skillId: skill.slug,
-            targets
-          })
-        : await invoke<SyncPlan>("preview_sync_from_installation", {
-            source: validInstall
-              ? {
-                  installationId: validInstall.id,
-                  entryPath: validInstall.entryPath,
-                  slug: skill.slug
-                }
-              : {
-                  installationId: "",
-                  entryPath: "",
-                  slug: skill.slug
-                },
-            targets
-          });
-      setSyncPlan(plan);
-      setView("sync");
-    } catch (reason) {
-      setError(String(reason));
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function previewQuickMigration(skills = queuedSkills, method: QuickMigrationMethod, targets: AgentTarget[] = []) {
-    const skill = skills[0];
-    const source = skill ? firstValidInstallation(skill) : null;
-    if (!skill || !source) return;
-    setBusy("生成同步预览");
-    setError(null);
-    setApplyResult(null);
-    if (!isTauriRuntime()) {
-      setSyncPlan(demoPlan(skill, targets, "quick-migrate"));
-      setView("sync");
-      setBusy("");
-      return;
-    }
-    try {
-      const plan = await invoke<SyncPlan>("preview_quick_migration", {
-        source: {
-          installationId: source.id,
-          entryPath: source.entryPath,
-          slug: skill.slug
-        },
-        targets,
-        method
+      const plan = await invoke<SyncPlan>("preview_batch_sync", {
+        sources,
+        targets
       });
       setSyncPlan(plan);
       setView("sync");
@@ -340,14 +293,31 @@ export default function App() {
     }
   }
 
-  function previewAdopt(skill: SkillRecord) {
-    setSelectedSkillIds((current) => {
-      const next = new Set(current);
-      next.add(skill.id);
-      return next;
-    });
-    setView("sync");
-    setSyncMode("managed");
+  async function previewQuickMigration(skills = queuedSkills, method: QuickMigrationMethod, targets: AgentTarget[] = []) {
+    const sources = quickMigrationSourcesForSkills(skills);
+    if (sources.length === 0) return;
+    setBusy("生成同步预览");
+    setError(null);
+    setApplyResult(null);
+    if (!isTauriRuntime()) {
+      setSyncPlan(demoBatchPlan(skills, targets, "batch-quick-migrate"));
+      setView("sync");
+      setBusy("");
+      return;
+    }
+    try {
+      const plan = await invoke<SyncPlan>("preview_batch_quick_migration", {
+        sources,
+        targets,
+        method
+      });
+      setSyncPlan(plan);
+      setView("sync");
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setBusy("");
+    }
   }
 
   async function applyPlan() {
@@ -543,14 +513,14 @@ export default function App() {
     });
   }
 
-  function selectForSync(skill: SkillRecord) {
-    setSelectedSkillIds((current) => {
-      const next = new Set(current);
-      next.add(skill.id);
-      return next;
-    });
+  function openSelectedSkillsSync(mode: SyncMode) {
+    if (selectedSkillIds.size === 0) return;
     setView("sync");
-    setSyncMode("quick");
+    setSyncMode(mode);
+  }
+
+  function clearSelectedSkills() {
+    setSelectedSkillIds(new Set());
   }
 
   async function refreshSkillsShUpdateChecks(skills: SkillRecord[], locks: Record<string, SkillLockEntry>) {
@@ -693,8 +663,9 @@ export default function App() {
             onSelectSkill={setSelectedSkillId}
             onToggleSkill={toggleSkill}
             onUpdateSkill={updateSkillsShSkill}
-            onAdopt={previewAdopt}
-            onSelectForSync={selectForSync}
+            onAdoptSelected={() => openSelectedSkillsSync("managed")}
+            onQuickSyncSelected={() => openSelectedSkillsSync("quick")}
+            onClearSelection={clearSelectedSkills}
             onRefresh={() => void refreshInventory()}
             onAddProject={() => void addProjectWorkspace()}
             onDiscoverProjects={() => void discoverProjectWorkspaces()}
@@ -882,8 +853,9 @@ function SkillsView({
   onSelectSkill,
   onToggleSkill,
   onUpdateSkill,
-  onAdopt,
-  onSelectForSync,
+  onAdoptSelected,
+  onQuickSyncSelected,
+  onClearSelection,
   onRefresh,
   onAddProject,
   onDiscoverProjects,
@@ -916,8 +888,9 @@ function SkillsView({
   onSelectSkill: (id: string | null) => void;
   onToggleSkill: (id: string) => void;
   onUpdateSkill: (skill: SkillRecord) => void;
-  onAdopt: (skill: SkillRecord) => void;
-  onSelectForSync: (skill: SkillRecord) => void;
+  onAdoptSelected: () => void;
+  onQuickSyncSelected: () => void;
+  onClearSelection: () => void;
   onRefresh: () => void;
   onAddProject: () => void;
   onDiscoverProjects: () => void;
@@ -1003,6 +976,10 @@ function SkillsView({
       ? "可以从中心库同步到当前项目，或创建某个 Agent 的项目 skills 目录。"
       : "选择一个项目根目录后，Oh My Skills 会自动检测该项目下各 Agent 的项目级 Skills。"
     : "重新扫描或从中心库同步到某个 Agent 后，这里会显示机器级生效的 Skills。";
+  const selectedSkills = selectedSkillsInOrder(selectedSkillIds, allSkills);
+  const selectedCount = selectedSkills.length;
+  const recentSelectedSkills = selectedSkills.slice(-2);
+  const extraSelectedCount = Math.max(0, selectedCount - recentSelectedSkills.length);
 
   return (
     <div className="skills-page">
@@ -1239,8 +1216,6 @@ function SkillsView({
                         skill={skill}
                         settings={settings}
                         skillLocks={skillLocks}
-                        onAdopt={() => onAdopt(skill)}
-                        onSelectForSync={() => onSelectForSync(skill)}
                       />
                     )}
                   </Fragment>
@@ -1261,6 +1236,32 @@ function SkillsView({
           <ProjectWorkspaceEmptyState onAddProject={onAddProject} onDiscoverProjects={onDiscoverProjects} />
         )}
       </section>
+
+      {selectedCount > 0 && (
+        <div className="selection-action-bar" role="region" aria-label="已选 Skills 操作">
+          <div className="selection-summary">
+            <div className="selection-names">
+              {recentSelectedSkills.map((skill) => (
+                <span className="selection-name-chip" key={skill.id} title={skill.displayName}>
+                  {skill.displayName}
+                </span>
+              ))}
+              {extraSelectedCount > 0 && <span className="selection-extra">+{extraSelectedCount}</span>}
+            </div>
+            <button className="selection-clear" onClick={onClearSelection} type="button">
+              取消全选
+            </button>
+          </div>
+          <div className="selection-actions">
+            <button className="secondary-button large" onClick={onAdoptSelected} type="button">
+              导入中心库 {selectedCount} 个
+            </button>
+            <button className="primary-button large" onClick={onQuickSyncSelected} type="button">
+              快速同步 {selectedCount} 个
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1323,6 +1324,11 @@ function ProjectWorkspaceEmptyState({
       </div>
     </section>
   );
+}
+
+function selectedSkillsInOrder(selectedSkillIds: Set<string>, skills: SkillRecord[]) {
+  const byId = new Map(skills.map((skill) => [skill.id, skill]));
+  return [...selectedSkillIds].map((id) => byId.get(id)).filter((skill): skill is SkillRecord => Boolean(skill));
 }
 
 function SkillRow({
@@ -1455,17 +1461,12 @@ function SkillAgentStack({ skill, agents }: { skill: SkillRecord; agents: AgentR
 function SkillDetail({
   skill,
   settings,
-  skillLocks,
-  onAdopt,
-  onSelectForSync
+  skillLocks
 }: {
   skill: SkillRecord;
   settings: AppSettings;
   skillLocks: Record<string, SkillLockEntry>;
-  onAdopt: () => void;
-  onSelectForSync: () => void;
 }) {
-  const canAdopt = skill.canonicalStatus !== "imported" && Boolean(firstValidInstallation(skill));
   const source = skillSourceSummary(skill, skillLocks);
   const sourceInstallation = firstValidInstallation(skill);
   const localPath = skill.canonicalPath ?? sourceInstallation?.entryPath ?? "";
@@ -1515,15 +1516,6 @@ function SkillDetail({
           <IssueList issues={skill.issues} />
         </DetailField>
       )}
-
-      <div className="detail-actions">
-        <button className="secondary-button" disabled={!canAdopt} onClick={onAdopt}>
-          导入中心库
-        </button>
-        <button className="primary-button" onClick={onSelectForSync}>
-          快速同步
-        </button>
-      </div>
     </div>
   );
 }
@@ -1584,7 +1576,7 @@ function SyncView({
   const [selectedTargetIds, setSelectedTargetIds] = useState<Set<string>>(() => new Set(agents.slice(0, 3).map((agent) => agent.id)));
   const targetMenuRef = useRef<HTMLDivElement>(null);
   const selectedSkill = queuedSkills[0] ?? null;
-  const selectedSource = selectedSkill ? firstValidInstallation(selectedSkill) : null;
+  const selectedSkillCount = queuedSkills.length;
 
   useEffect(() => {
     setSelectedTargetIds((current) => {
@@ -1619,14 +1611,15 @@ function SyncView({
   const blocked = Boolean(plan?.blockedConflicts.length);
   const summary = plan ? syncPlanSummary(plan) : null;
   const groups = plan ? groupedOperations(plan.operations, agents) : [];
-  const actionDisabled = !selectedSkill || selectedTargets.length === 0 || busy;
-  const previewLabel = syncMode === "quick" ? "生成同步预览" : "生成中心库同步预览";
+  const actionDisabled = selectedSkillCount === 0 || selectedTargets.length === 0 || busy;
+  const previewLabel = syncMode === "quick"
+    ? `生成 ${selectedSkillCount} 个快速同步预览`
+    : `生成 ${selectedSkillCount} 个中心库同步预览`;
   const generatedPlan = Boolean(plan);
-  const sourcePath = selectedSource?.entryPath ?? "";
-  const centralPath = selectedSkill ? `${settings.libraryPath}/${selectedSkill.slug}` : "";
+  const centralPath = selectedSkillCount === 1 && selectedSkill ? `${settings.libraryPath}/${selectedSkill.slug}` : settings.libraryPath;
   const confirmationText = plan
     ? planSummarySentence(plan, summary)
-    : draftPlanSentence(syncMode, quickMethod, selectedTargets.length);
+    : draftPlanSentence(syncMode, quickMethod, selectedSkillCount, selectedTargets.length);
 
   function toggleTarget(agentId: string) {
     setSelectedTargetIds((current) => {
@@ -1675,18 +1668,26 @@ function SyncView({
         <div className="sync-work-grid">
           <section className="sync-form-pane">
             <SyncSection number="1" title="已选 Skill">
-              {selectedSkill ? (
-                <div className="selected-skill-card">
-                  <FileText size={22} />
-                  <span>
-                    <strong>{selectedSkill.displayName}</strong>
-                    <small>
-                      来源 Agent {selectedSource?.agentLabel ?? "未知"} <i /> 来源路径 {sourcePath ? compactPath(sourcePath) : selectedSkill.slug}
-                    </small>
-                  </span>
-                  <button className="icon-button subtle" onClick={() => onRemoveSkill(selectedSkill.id)} title="移除">
-                    <XCircle size={16} />
-                  </button>
+              {queuedSkills.length > 0 ? (
+                <div className="selected-skill-list">
+                  {queuedSkills.map((skill) => {
+                    const selectedSource = firstValidInstallation(skill);
+                    const sourcePath = selectedSource?.entryPath ?? skill.canonicalPath ?? "";
+                    return (
+                      <div className="selected-skill-card" key={skill.id}>
+                        <FileText size={22} />
+                        <span>
+                          <strong>{skill.displayName}</strong>
+                          <small>
+                            来源 Agent {selectedSource?.agentLabel ?? "中心库"} <i /> 来源路径 {sourcePath ? compactPath(sourcePath) : skill.slug}
+                          </small>
+                        </span>
+                        <button className="icon-button subtle" onClick={() => onRemoveSkill(skill.id)} title="移除">
+                          <XCircle size={16} />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="empty-inline">
@@ -1941,14 +1942,15 @@ function targetPathPreview(agent: AgentRecord, scope: "global" | "project") {
   return scope === "project" ? agent.projectRoots[0] : agent.globalRoots[0];
 }
 
-function draftPlanSentence(mode: SyncMode, method: QuickMigrationMethod, targetCount: number) {
+function draftPlanSentence(mode: SyncMode, method: QuickMigrationMethod, skillCount: number, targetCount: number) {
+  if (skillCount === 0) return "请先选择至少 1 个 Skill。";
   if (targetCount === 0) return "请选择至少 1 个目标 Agent。";
   if (mode === "managed") {
-    return `将导入中心库 1 个 Skill，并创建 ${targetCount} 个软链接。`;
+    return `将导入中心库 ${skillCount} 个 Skill，并创建 ${skillCount * targetCount} 个软链接。`;
   }
   return method === "copy"
-    ? `将复制 1 个 Skill 到 ${targetCount} 个 Agent。`
-    : `将在 ${targetCount} 个 Agent 中创建软链接。`;
+    ? `将复制 ${skillCount} 个 Skill 到 ${targetCount} 个 Agent。`
+    : `将在 ${targetCount} 个 Agent 中为 ${skillCount} 个 Skill 创建软链接。`;
 }
 
 function planSummarySentence(plan: SyncPlan, summary: ReturnType<typeof syncPlanSummary> | null) {
@@ -2272,6 +2274,36 @@ function operationStatusLabel(status: string) {
 
 function firstValidInstallation(skill: SkillRecord): SkillInstallation | null {
   return skill.installations.find((installation) => installation.status !== "invalid" && !installation.brokenSymlink) ?? null;
+}
+
+function syncSourcesForSkills(skills: SkillRecord[]): InstallationRef[] {
+  return skills.map((skill) => {
+    if (skill.canonicalStatus === "imported") {
+      return {
+        installationId: "",
+        entryPath: "",
+        slug: skill.slug
+      };
+    }
+
+    const installation = firstValidInstallation(skill);
+    return {
+      installationId: installation?.id ?? "",
+      entryPath: installation?.entryPath ?? "",
+      slug: skill.slug
+    };
+  });
+}
+
+function quickMigrationSourcesForSkills(skills: SkillRecord[]): InstallationRef[] {
+  return skills.map((skill) => {
+    const installation = firstValidInstallation(skill);
+    return {
+      installationId: installation?.id ?? "",
+      entryPath: installation?.entryPath ?? skill.canonicalPath ?? "",
+      slug: skill.slug
+    };
+  });
 }
 
 function skillListStatus(
@@ -2628,5 +2660,23 @@ function demoPlan(skill: SkillRecord, targets: AgentTarget[], kind: "adopt" | "s
         skillId: skill.id
       }))
     ]
+  };
+}
+
+function demoBatchPlan(skills: SkillRecord[], targets: AgentTarget[], kind: "batch-sync" | "batch-quick-migrate"): SyncPlan {
+  const plans = skills.map((skill) => demoPlan(skill, targets, kind === "batch-sync" ? "sync" : "quick-migrate"));
+  return {
+    planId: `demo-${kind}-${Date.now()}`,
+    kind,
+    riskLevel: plans.some((plan) => plan.riskLevel === "medium") ? "medium" : "low",
+    preconditions: Array.from(new Set(plans.flatMap((plan) => plan.preconditions))),
+    blockedConflicts: plans.flatMap((plan) => plan.blockedConflicts),
+    createdAt: new Date().toISOString(),
+    operations: plans.flatMap((plan, planIndex) =>
+      plan.operations.map((operation) => ({
+        ...operation,
+        id: `${operation.id}-${planIndex}`
+      }))
+    )
   };
 }

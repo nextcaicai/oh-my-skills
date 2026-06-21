@@ -204,6 +204,25 @@ pub fn preview_quick_migration(
 }
 
 #[tauri::command]
+pub fn preview_batch_sync(
+    app: AppHandle,
+    sources: Vec<InstallationRef>,
+    targets: Vec<AgentTarget>,
+) -> Result<SyncPlan, String> {
+    sync_plan::preview_batch_sync(&app, sources, targets)
+}
+
+#[tauri::command]
+pub fn preview_batch_quick_migration(
+    app: AppHandle,
+    sources: Vec<InstallationRef>,
+    targets: Vec<AgentTarget>,
+    method: String,
+) -> Result<SyncPlan, String> {
+    sync_plan::preview_batch_quick_migration(&app, sources, targets, method)
+}
+
+#[tauri::command]
 pub fn apply_sync_plan(app: AppHandle, plan_id: String) -> Result<ApplyResult, String> {
     sync_plan::apply_plan(&app, plan_id)
 }

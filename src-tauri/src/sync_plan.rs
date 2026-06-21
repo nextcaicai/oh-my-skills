@@ -273,6 +273,195 @@ pub fn preview_quick_migration(
     Ok(plan)
 }
 
+pub fn preview_batch_sync(
+    app: &AppHandle,
+    sources: Vec<InstallationRef>,
+    targets: Vec<AgentTarget>,
+) -> Result<SyncPlan, String> {
+    let settings = load_settings(app)?;
+    let library_path = PathBuf::from(&settings.library_path);
+    let plan_id = plan_id("batch-sync");
+    let created_at = Utc::now().to_rfc3339();
+    let backup_root = app_data_dir(app)?.join("backups").join(&plan_id);
+    let mut operations = Vec::new();
+    let mut blocked_conflicts = Vec::new();
+    let mut preconditions = Vec::new();
+
+    for source in sources {
+        let destination = library_path.join(&source.slug);
+        let source_path = if source.entry_path.is_empty() {
+            destination.clone()
+        } else {
+            PathBuf::from(&source.entry_path)
+        };
+
+        if source.entry_path.is_empty() {
+            let source_hash = if !source_path.join("SKILL.md").exists() {
+                blocked_conflicts.push(format!(
+                    "{} is not imported into the central library yet",
+                    source.slug
+                ));
+                None
+            } else {
+                Some(hash_dir(&source_path)?)
+            };
+
+            append_sync_operations(
+                &settings,
+                &source.slug,
+                &source_path,
+                source_hash.as_deref(),
+                targets.clone(),
+                &backup_root,
+                &mut operations,
+                &mut blocked_conflicts,
+                &mut preconditions,
+            );
+            continue;
+        }
+
+        if !source_path.join("SKILL.md").exists() {
+            blocked_conflicts.push(format!(
+                "{} has no valid source SKILL.md and cannot be synced",
+                source.slug
+            ));
+            append_sync_operations(
+                &settings,
+                &source.slug,
+                &destination,
+                None,
+                targets.clone(),
+                &backup_root,
+                &mut operations,
+                &mut blocked_conflicts,
+                &mut preconditions,
+            );
+            continue;
+        }
+
+        let source_hash = hash_dir(&source_path)?;
+        if destination.exists() {
+            let existing_hash = hash_dir(&destination)?;
+            if existing_hash == source_hash {
+                operations.push(operation(
+                    "noop",
+                    "noop",
+                    Some(&source_path),
+                    Some(&destination),
+                    None,
+                    &format!("{} is already imported with the same content", source.slug),
+                    None,
+                    Some(&source.slug),
+                ));
+            } else {
+                blocked_conflicts.push(format!(
+                    "{} already exists in the central library with different content",
+                    source.slug
+                ));
+            }
+        } else {
+            preconditions
+                .push("Copy source skill into the central library before linking".to_string());
+            operations.push(operation(
+                "copy-to-library",
+                "planned",
+                Some(&source_path),
+                Some(&destination),
+                None,
+                &format!("Import {} into the central library", source.slug),
+                None,
+                Some(&source.slug),
+            ));
+        }
+
+        append_sync_operations(
+            &settings,
+            &source.slug,
+            &destination,
+            Some(&source_hash),
+            targets.clone(),
+            &backup_root,
+            &mut operations,
+            &mut blocked_conflicts,
+            &mut preconditions,
+        );
+    }
+
+    let plan = sync_plan_from_parts(
+        plan_id,
+        "batch-sync",
+        operations,
+        preconditions,
+        blocked_conflicts,
+        created_at,
+    );
+    save_plan(app, &plan)?;
+    Ok(plan)
+}
+
+pub fn preview_batch_quick_migration(
+    app: &AppHandle,
+    sources: Vec<InstallationRef>,
+    targets: Vec<AgentTarget>,
+    method: String,
+) -> Result<SyncPlan, String> {
+    let settings = load_settings(app)?;
+    let plan_id = plan_id("batch-quick-migrate");
+    let created_at = Utc::now().to_rfc3339();
+    let backup_root = app_data_dir(app)?.join("backups").join(&plan_id);
+    let mut operations = Vec::new();
+    let mut blocked_conflicts = Vec::new();
+    let mut preconditions = Vec::new();
+
+    for source in sources {
+        let source_path = PathBuf::from(&source.entry_path);
+        if source.entry_path.is_empty() || !source_path.join("SKILL.md").exists() {
+            blocked_conflicts.push(format!(
+                "{} has no valid source SKILL.md and cannot be migrated",
+                source.slug
+            ));
+            append_quick_migration_operations(
+                &settings,
+                &source.slug,
+                &source_path,
+                None,
+                targets.clone(),
+                &method,
+                &backup_root,
+                &mut operations,
+                &mut blocked_conflicts,
+                &mut preconditions,
+            );
+            continue;
+        }
+
+        let source_hash = hash_dir(&source_path)?;
+        append_quick_migration_operations(
+            &settings,
+            &source.slug,
+            &source_path,
+            Some(&source_hash),
+            targets.clone(),
+            &method,
+            &backup_root,
+            &mut operations,
+            &mut blocked_conflicts,
+            &mut preconditions,
+        );
+    }
+
+    let plan = sync_plan_from_parts(
+        plan_id,
+        "batch-quick-migrate",
+        operations,
+        preconditions,
+        blocked_conflicts,
+        created_at,
+    );
+    save_plan(app, &plan)?;
+    Ok(plan)
+}
+
 fn append_quick_migration_operations(
     settings: &crate::models::Settings,
     skill_id: &str,
@@ -862,8 +1051,10 @@ fn operation(
     skill_id: Option<&str>,
 ) -> SyncOperation {
     let seed = format!(
-        "{}:{}:{}:{}",
+        "{}:{}:{}:{}:{}:{}",
         op_type,
+        agent_id.unwrap_or_default(),
+        skill_id.unwrap_or_default(),
         source_path.map(path_to_string).unwrap_or_default(),
         target_path.map(path_to_string).unwrap_or_default(),
         message
