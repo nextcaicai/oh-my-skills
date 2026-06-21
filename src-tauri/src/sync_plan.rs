@@ -220,6 +220,156 @@ pub fn preview_sync_from_installation(
     Ok(plan)
 }
 
+pub fn preview_quick_migration(
+    app: &AppHandle,
+    source: InstallationRef,
+    targets: Vec<AgentTarget>,
+    method: String,
+) -> Result<SyncPlan, String> {
+    let settings = load_settings(app)?;
+    let source_path = PathBuf::from(&source.entry_path);
+    let plan_id = plan_id("quick-migrate");
+    let created_at = Utc::now().to_rfc3339();
+    let backup_root = app_data_dir(app)?.join("backups").join(&plan_id);
+    let mut operations = Vec::new();
+    let mut blocked_conflicts = Vec::new();
+    let mut preconditions = Vec::new();
+
+    if source.entry_path.is_empty() || !source_path.join("SKILL.md").exists() {
+        blocked_conflicts.push(format!(
+            "{} has no valid source SKILL.md and cannot be migrated",
+            source.slug
+        ));
+    }
+
+    let source_hash = if blocked_conflicts.is_empty() {
+        Some(hash_dir(&source_path)?)
+    } else {
+        None
+    };
+
+    append_quick_migration_operations(
+        &settings,
+        &source.slug,
+        &source_path,
+        source_hash.as_deref(),
+        targets,
+        &method,
+        &backup_root,
+        &mut operations,
+        &mut blocked_conflicts,
+        &mut preconditions,
+    );
+
+    let plan = sync_plan_from_parts(
+        plan_id,
+        "quick-migrate",
+        operations,
+        preconditions,
+        blocked_conflicts,
+        created_at,
+    );
+    save_plan(app, &plan)?;
+    Ok(plan)
+}
+
+fn append_quick_migration_operations(
+    settings: &crate::models::Settings,
+    skill_id: &str,
+    source_path: &Path,
+    source_hash: Option<&str>,
+    targets: Vec<AgentTarget>,
+    method: &str,
+    backup_root: &Path,
+    operations: &mut Vec<SyncOperation>,
+    blocked_conflicts: &mut Vec<String>,
+    preconditions: &mut Vec<String>,
+) {
+    let installed_agent_ids = detect_agents(settings, false)
+        .into_iter()
+        .filter(|agent| agent.installed)
+        .map(|agent| agent.id)
+        .collect::<std::collections::BTreeSet<_>>();
+
+    let targets = if targets.is_empty() {
+        default_targets(settings)
+    } else {
+        targets
+    };
+
+    for target in targets {
+        let Some(agent) = find_agent(&target.agent_id) else {
+            blocked_conflicts.push(format!("Unknown agent id '{}'", target.agent_id));
+            continue;
+        };
+        if method == "symlink" && !agent.symlink_support {
+            blocked_conflicts.push(format!(
+                "{} does not support symlink migration",
+                agent.label
+            ));
+            continue;
+        }
+        if !installed_agent_ids.contains(&agent.id) {
+            blocked_conflicts.push(format!("{} is not detected as installed", agent.label));
+            continue;
+        }
+        let target_roots = target_roots_for_agent(&agent, target.scope.as_deref(), settings);
+        if target_roots.is_empty() {
+            let scope = target.scope.as_deref().unwrap_or("global");
+            blocked_conflicts.push(format!(
+                "{} has no {scope} skill root configured",
+                agent.label
+            ));
+            continue;
+        }
+
+        for (scope, root_path) in target_roots {
+            let target_path = root_path.join(skill_id);
+            if target_path == source_path {
+                operations.push(operation(
+                    "noop",
+                    "noop",
+                    Some(source_path),
+                    Some(&target_path),
+                    None,
+                    &format!("{} is already in {}", skill_id, agent.label),
+                    Some(&agent.id),
+                    Some(skill_id),
+                ));
+                continue;
+            }
+
+            if !root_path.exists() {
+                preconditions.push(format!("Create {} {scope} skill root", agent.label));
+                operations.push(operation(
+                    "create-root",
+                    "planned",
+                    None,
+                    Some(&root_path),
+                    None,
+                    &format!("Create {scope} skill root for {}", agent.label),
+                    Some(&agent.id),
+                    Some(skill_id),
+                ));
+            }
+
+            plan_quick_target(
+                &agent.id,
+                &agent.label,
+                skill_id,
+                source_path,
+                source_hash,
+                &root_path,
+                &target_path,
+                method,
+                backup_root,
+                operations,
+                blocked_conflicts,
+            );
+        }
+    }
+}
+
 fn append_sync_operations(
     settings: &crate::models::Settings,
     skill_id: &str,
@@ -355,6 +505,11 @@ pub fn apply_plan(app: &AppHandle, plan_id: String) -> Result<ApplyResult, Strin
         }
         let result = match operation.op_type.as_str() {
             "copy-to-library" => {
+                let source = required_path(operation.source_path.as_deref(), operation)?;
+                let target = required_path(operation.target_path.as_deref(), operation)?;
+                copy_dir_recursive(&source, &target)
+            }
+            "copy-to-target" => {
                 let source = required_path(operation.source_path.as_deref(), operation)?;
                 let target = required_path(operation.target_path.as_deref(), operation)?;
                 copy_dir_recursive(&source, &target)
@@ -508,6 +663,145 @@ fn plan_target_sync(
                 Some(agent_id),
                 Some(skill_id),
             ));
+        } else {
+            blocked_conflicts.push(format!(
+                "{} already has {} with different content",
+                agent_label, skill_id
+            ));
+        }
+    } else {
+        blocked_conflicts.push(format!(
+            "{} has an invalid or unreadable {} entry",
+            agent_label, skill_id
+        ));
+    }
+}
+
+fn plan_quick_target(
+    agent_id: &str,
+    agent_label: &str,
+    skill_id: &str,
+    source_path: &Path,
+    source_hash: Option<&str>,
+    root_path: &Path,
+    target_path: &Path,
+    method: &str,
+    backup_root: &Path,
+    operations: &mut Vec<SyncOperation>,
+    blocked_conflicts: &mut Vec<String>,
+) {
+    let backup_path = backup_root.join(agent_id).join(skill_id);
+    let source_hash = source_hash.unwrap_or_default();
+    let final_op = if method == "symlink" {
+        "create-symlink"
+    } else {
+        "copy-to-target"
+    };
+    let final_message = if method == "symlink" {
+        format!("Link {} into {}", skill_id, agent_label)
+    } else {
+        format!("Copy {} into {}", skill_id, agent_label)
+    };
+
+    if fs::symlink_metadata(target_path).is_err() {
+        operations.push(operation(
+            final_op,
+            "planned",
+            Some(source_path),
+            Some(target_path),
+            None,
+            &final_message,
+            Some(agent_id),
+            Some(skill_id),
+        ));
+        return;
+    }
+
+    let installation = inspect_installation(
+        agent_id,
+        agent_label,
+        "global",
+        root_path,
+        target_path,
+        source_path.parent().unwrap_or(source_path),
+    );
+
+    if installation.broken_symlink {
+        operations.push(operation(
+            "remove-existing",
+            "planned",
+            None,
+            Some(target_path),
+            None,
+            &format!("Remove broken symlink in {}", agent_label),
+            Some(agent_id),
+            Some(skill_id),
+        ));
+        operations.push(operation(
+            final_op,
+            "planned",
+            Some(source_path),
+            Some(target_path),
+            None,
+            &final_message,
+            Some(agent_id),
+            Some(skill_id),
+        ));
+        return;
+    }
+
+    if installation.real_path.as_deref() == Some(&path_to_string(source_path)) {
+        operations.push(operation(
+            "noop",
+            "noop",
+            Some(source_path),
+            Some(target_path),
+            None,
+            &format!("{} is already linked into {}", skill_id, agent_label),
+            Some(agent_id),
+            Some(skill_id),
+        ));
+        return;
+    }
+
+    if let Some(hash) = &installation.hash {
+        if hash == source_hash {
+            if method == "copy" {
+                operations.push(operation(
+                    "noop",
+                    "noop",
+                    Some(source_path),
+                    Some(target_path),
+                    None,
+                    &format!(
+                        "{} already exists with the same content in {}",
+                        skill_id, agent_label
+                    ),
+                    Some(agent_id),
+                    Some(skill_id),
+                ));
+            } else {
+                operations.push(operation(
+                    "backup-existing",
+                    "planned",
+                    None,
+                    Some(target_path),
+                    Some(&backup_path),
+                    &format!("Back up existing same-content skill in {}", agent_label),
+                    Some(agent_id),
+                    Some(skill_id),
+                ));
+                operations.push(operation(
+                    final_op,
+                    "planned",
+                    Some(source_path),
+                    Some(target_path),
+                    None,
+                    &final_message,
+                    Some(agent_id),
+                    Some(skill_id),
+                ));
+            }
         } else {
             blocked_conflicts.push(format!(
                 "{} already has {} with different content",

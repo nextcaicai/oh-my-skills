@@ -23,6 +23,7 @@ pub fn run() {
             commands::preview_adopt,
             commands::preview_sync,
             commands::preview_sync_from_installation,
+            commands::preview_quick_migration,
             commands::apply_sync_plan
         ])
         .run(tauri::generate_context!())

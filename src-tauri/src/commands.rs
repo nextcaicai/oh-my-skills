@@ -188,6 +188,16 @@ pub fn preview_sync_from_installation(
 }
 
 #[tauri::command]
+pub fn preview_quick_migration(
+    app: AppHandle,
+    source: InstallationRef,
+    targets: Vec<AgentTarget>,
+    method: String,
+) -> Result<SyncPlan, String> {
+    sync_plan::preview_quick_migration(&app, source, targets, method)
+}
+
+#[tauri::command]
 pub fn apply_sync_plan(app: AppHandle, plan_id: String) -> Result<ApplyResult, String> {
     sync_plan::apply_plan(&app, plan_id)
 }

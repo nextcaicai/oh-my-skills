@@ -21,7 +21,7 @@ import {
   ShieldCheck,
   XCircle
 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { agentIconAsset } from "./agentIconRegistry";
 import type {
   AgentRecord,
@@ -42,6 +42,8 @@ import type {
 type View = "agents" | "skills" | "sync";
 type SkillWorkspace = "global" | "project";
 type AgentViewFilter = "all" | "installed";
+type SyncMode = "quick" | "managed";
+type QuickMigrationMethod = "copy" | "symlink";
 
 const defaultSettings: AppSettings = {
   libraryPath: "",
@@ -72,8 +74,11 @@ export default function App() {
   const [busy, setBusy] = useState("启动中");
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const bootStartedRef = useRef(false);
 
   useEffect(() => {
+    if (bootStartedRef.current) return;
+    bootStartedRef.current = true;
     void boot();
   }, []);
 
@@ -145,10 +150,6 @@ export default function App() {
     () => allSkills.filter((skill) => selectedSkillIds.has(skill.id)),
     [allSkills, selectedSkillIds]
   );
-
-  useEffect(() => {
-    void refreshSkillsShUpdateChecks(allSkills, skillLocks);
-  }, [inventory?.scannedAt, skillLocks]);
 
   async function boot() {
     setBusy("读取设置");
@@ -242,6 +243,38 @@ export default function App() {
                 },
             targets
           });
+      setSyncPlan(plan);
+      setView("sync");
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function previewQuickMigration(skills = queuedSkills, method: QuickMigrationMethod, targets: AgentTarget[] = []) {
+    const skill = skills[0];
+    const source = skill ? firstValidInstallation(skill) : null;
+    if (!skill || !source) return;
+    setBusy("生成迁移预览");
+    setError(null);
+    setApplyResult(null);
+    if (!isTauriRuntime()) {
+      setSyncPlan(demoPlan(skill, targets, "quick-migrate"));
+      setView("sync");
+      setBusy("");
+      return;
+    }
+    try {
+      const plan = await invoke<SyncPlan>("preview_quick_migration", {
+        source: {
+          installationId: source.id,
+          entryPath: source.entryPath,
+          slug: skill.slug
+        },
+        targets,
+        method
+      });
       setSyncPlan(plan);
       setView("sync");
     } catch (reason) {
@@ -592,6 +625,7 @@ export default function App() {
           <SyncView
             agents={installedAgents.length ? installedAgents : agents}
             queuedSkills={queuedSkills}
+            settings={settings}
             plan={syncPlan}
             applyResult={applyResult}
             busy={Boolean(busy)}
@@ -604,6 +638,7 @@ export default function App() {
             }}
             onPreviewGlobal={(targets) => void previewSkillsSync(queuedSkills, targets)}
             onPreviewProject={(targets) => void previewSkillsSync(queuedSkills, targets)}
+            onPreviewQuick={(method, targets) => void previewQuickMigration(queuedSkills, method, targets)}
             onApply={() => void applyPlan()}
             onGoSkills={() => setView("skills")}
           />
@@ -1296,119 +1331,208 @@ async function openUrl(url: string | null) {
 function SyncView({
   agents,
   queuedSkills,
+  settings,
   plan,
   applyResult,
   busy,
   onRemoveSkill,
   onPreviewGlobal,
   onPreviewProject,
+  onPreviewQuick,
   onApply,
   onGoSkills
 }: {
   agents: AgentRecord[];
   queuedSkills: SkillRecord[];
+  settings: AppSettings;
   plan: SyncPlan | null;
   applyResult: ApplyResult | null;
   busy: boolean;
   onRemoveSkill: (id: string) => void;
   onPreviewGlobal: (targets: AgentTarget[]) => void;
   onPreviewProject: (targets: AgentTarget[]) => void;
+  onPreviewQuick: (method: QuickMigrationMethod, targets: AgentTarget[]) => void;
   onApply: () => void;
   onGoSkills: () => void;
 }) {
-  const [targetAgentId, setTargetAgentId] = useState("all");
+  const [syncMode, setSyncMode] = useState<SyncMode>("quick");
+  const [quickMethod, setQuickMethod] = useState<QuickMigrationMethod>("copy");
+  const [targetScope, setTargetScope] = useState<"global" | "project">("global");
+  const [selectedTargetIds, setSelectedTargetIds] = useState<Set<string>>(() => new Set(agents.map((agent) => agent.id)));
+  const selectedSkill = queuedSkills[0] ?? null;
+  const selectedSource = selectedSkill ? firstValidInstallation(selectedSkill) : null;
 
-  const globalTargets = targetAgentId === "all"
-    ? agents.map((agent) => ({ agentId: agent.id, scope: "global" }))
-    : [{ agentId: targetAgentId, scope: "global" }];
-  const projectTargets = targetAgentId === "all"
-    ? agents.filter((agent) => agent.projectRoots.length > 0).map((agent) => ({ agentId: agent.id, scope: "project" }))
-    : [{ agentId: targetAgentId, scope: "project" }];
+  useEffect(() => {
+    setSelectedTargetIds((current) => {
+      const validIds = new Set(agents.map((agent) => agent.id));
+      const next = new Set([...current].filter((id) => validIds.has(id)));
+      if (next.size > 0) return next;
+      return new Set(agents.map((agent) => agent.id));
+    });
+  }, [agents]);
+
+  const selectedTargets = agents.filter((agent) => selectedTargetIds.has(agent.id));
+  const targets = selectedTargets.map((agent) => ({ agentId: agent.id, scope: targetScope }));
   const blocked = Boolean(plan?.blockedConflicts.length);
   const summary = plan ? syncPlanSummary(plan) : null;
   const groups = plan ? groupedOperations(plan.operations, agents) : [];
+  const actionDisabled = !selectedSkill || selectedTargets.length === 0 || busy;
+  const previewLabel = syncMode === "quick" ? "生成迁移预览" : "生成中心库同步预览";
+  const generatedPlan = Boolean(plan);
+  const sourcePath = selectedSource?.entryPath ?? "";
+  const centralPath = selectedSkill ? `${settings.libraryPath}/${selectedSkill.slug}` : "";
+  const confirmationText = plan
+    ? planSummarySentence(plan, summary)
+    : draftPlanSentence(syncMode, quickMethod, selectedTargets.length);
+
+  function toggleTarget(agentId: string) {
+    setSelectedTargetIds((current) => {
+      const next = new Set(current);
+      if (next.has(agentId)) next.delete(agentId);
+      else next.add(agentId);
+      return next;
+    });
+  }
+
+  function previewPlan() {
+    if (syncMode === "quick") {
+      onPreviewQuick(quickMethod, targets);
+    } else if (targetScope === "project") {
+      onPreviewProject(targets);
+    } else {
+      onPreviewGlobal(targets);
+    }
+  }
 
   return (
     <div className="sync-page">
-      <section className="queue-pane">
-        <div className="pane-title">
-          <div>
-            <h1>同步队列</h1>
-            <p>从“发现 Skills”选中的项目会先进入这里，预览后才会写入。</p>
-          </div>
-          <button className="secondary-button" onClick={onGoSkills}>
-            <Layers3 size={16} />
-            选择 Skills
+      <section className="sync-main-pane">
+        <div className="sync-mode-grid" aria-label="同步模式">
+          <button className={`sync-mode-card ${syncMode === "quick" ? "active" : ""}`} onClick={() => setSyncMode("quick")} type="button">
+            <CopyCheck size={24} />
+            <span>
+              <strong>快速迁移 <em>最快完成</em></strong>
+              <small>直接复制或创建软链接到目标 Agent，不使用中心库</small>
+            </span>
+          </button>
+          <button className={`sync-mode-card ${syncMode === "managed" ? "active" : ""}`} onClick={() => setSyncMode("managed")} type="button">
+            <Link2 size={24} />
+            <span>
+              <strong>纳入中心库并同步 <em>长期管理</em></strong>
+              <small>先复制到中心库，再用软链接分发到目标 Agent</small>
+            </span>
           </button>
         </div>
 
-        <div className="queued-list">
-          {queuedSkills.map((skill) => (
-            <div className="queued-skill" key={skill.id}>
-              <FileText size={18} />
-              <span>
-                <strong>{skill.displayName}</strong>
-                <small>{skill.slug}</small>
-              </span>
-              <button className="icon-button subtle" onClick={() => onRemoveSkill(skill.id)} title="移除">
-                <XCircle size={16} />
-              </button>
+        <div className="sync-work-grid">
+          <section className="sync-form-pane">
+            <SyncSection number="1" title="已选 Skill">
+              {selectedSkill ? (
+                <div className="selected-skill-card">
+                  <FileText size={22} />
+                  <span>
+                    <strong>{selectedSkill.displayName}</strong>
+                    <small>
+                      来源 Agent {selectedSource?.agentLabel ?? "未知"} <i /> 来源路径 {sourcePath ? compactPath(sourcePath) : selectedSkill.slug}
+                    </small>
+                  </span>
+                  <button className="icon-button subtle" onClick={() => onRemoveSkill(selectedSkill.id)} title="移除">
+                    <XCircle size={16} />
+                  </button>
+                </div>
+              ) : (
+                <div className="empty-inline">
+                  <ShieldCheck size={20} />
+                  <span>还没有要同步的 Skill，请先回到发现 Skills 选择。</span>
+                </div>
+              )}
+            </SyncSection>
+
+            {syncMode === "quick" ? (
+              <SyncSection number="2" title="迁移方式">
+                <div className="option-grid two">
+                  <button className={`choice-card ${quickMethod === "copy" ? "active" : ""}`} onClick={() => setQuickMethod("copy")} type="button">
+                    <CopyCheck size={20} />
+                    <span>
+                      <strong>复制副本</strong>
+                      <small>复制后目标 Agent 拥有独立副本</small>
+                    </span>
+                  </button>
+                  <button className={`choice-card ${quickMethod === "symlink" ? "active" : ""}`} onClick={() => setQuickMethod("symlink")} type="button">
+                    <Link2 size={20} />
+                    <span>
+                      <strong>创建软链接</strong>
+                      <small>在目标 Agent 中创建软链接，指向原位置</small>
+                    </span>
+                  </button>
+                </div>
+              </SyncSection>
+            ) : (
+              <SyncSection number="2" title="中心库副本">
+                <div className="managed-library-card">
+                  <Link2 size={20} />
+                  <span>
+                    <strong>先复制到中心库，再用软链接分发到目标 Agent</strong>
+                    <code title={centralPath}>{centralPath ? compactPath(centralPath) : "等待选择 Skill"}</code>
+                  </span>
+                  <em>将创建/确认</em>
+                </div>
+              </SyncSection>
+            )}
+
+            <SyncSection number="3" title="目标 Agent（可多选）">
+              <div className="target-chip-grid">
+                {agents.map((agent) => {
+                  const selected = selectedTargetIds.has(agent.id);
+                  const pathPreview = targetPathPreview(agent, targetScope);
+                  return (
+                    <button className={`target-chip ${selected ? "selected" : ""}`} key={agent.id} onClick={() => toggleTarget(agent.id)} type="button">
+                      <AgentIcon agent={agent} />
+                      <span>
+                        <strong>{agent.label}</strong>
+                        <small>{pathPreview ? compactPath(pathPreview) : "暂无项目路径"}</small>
+                      </span>
+                      {selected && <Check size={16} />}
+                    </button>
+                  );
+                })}
+              </div>
+            </SyncSection>
+
+            <SyncSection number="4" title="范围">
+              <div className="option-grid two">
+                <button className={`choice-card ${targetScope === "global" ? "active" : ""}`} onClick={() => setTargetScope("global")} type="button">
+                  <Globe2 size={21} />
+                  <span>
+                    <strong>全局</strong>
+                    <small>同步到各 Agent 的全局 Skills 目录</small>
+                  </span>
+                </button>
+                <button className={`choice-card ${targetScope === "project" ? "active" : ""}`} onClick={() => setTargetScope("project")} type="button">
+                  <FolderPlus size={21} />
+                  <span>
+                    <strong>当前项目</strong>
+                    <small>同步到已关联项目的本地 Skills 目录</small>
+                  </span>
+                </button>
+              </div>
+            </SyncSection>
+          </section>
+
+          <aside className="sync-confirm-pane">
+            <div className="pane-title">
+              <div>
+                <h1>执行前确认</h1>
+                <p>预览前不会写入任何内容。</p>
+              </div>
+              <ShieldCheck size={24} />
             </div>
-          ))}
-          {queuedSkills.length === 0 && (
-            <div className="empty-list">
-              <ShieldCheck size={28} />
-              <strong>还没有要同步的 Skills</strong>
-              <span>回到发现 Skills，选择一个或多个 Skill。</span>
+
+            <div className={`confirm-summary ${blocked ? "blocked" : ""}`}>
+              {blocked ? <AlertTriangle size={22} /> : <Check size={22} />}
+              <strong>{confirmationText}</strong>
             </div>
-          )}
-        </div>
 
-        <div className="sync-controls">
-          <label className="field">
-            <span>目标 Agent</span>
-            <select value={targetAgentId} onChange={(event) => setTargetAgentId(event.target.value)}>
-              <option value="all">全部已检测 Agent</option>
-              {agents.map((agent) => (
-                <option value={agent.id} key={agent.id}>{agent.label}</option>
-              ))}
-            </select>
-          </label>
-          <div className="button-pair">
-            <button className="primary-button" disabled={queuedSkills.length === 0} onClick={() => onPreviewGlobal(globalTargets)}>
-              <Globe2 size={16} />
-              同步到全局
-            </button>
-            <button className="secondary-button" disabled={queuedSkills.length === 0} onClick={() => onPreviewProject(projectTargets)}>
-              <FolderPlus size={16} />
-              同步到项目
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="plan-pane">
-        <div className="pane-title">
-          <div>
-            <h1>同步预览</h1>
-            <p>dry-run 结果会列出复制、备份、创建软链接等操作。</p>
-          </div>
-          <button className="primary-button" disabled={!plan || blocked || busy} onClick={onApply}>
-            <CopyCheck size={16} />
-            执行计划
-          </button>
-        </div>
-
-        {!plan && (
-          <div className="empty-detail">
-            <ShieldCheck size={36} />
-            <strong>等待生成同步计划</strong>
-            <span>预览前不会写入任何内容。</span>
-          </div>
-        )}
-
-        {plan && (
-          <>
             {summary && (
               <div className="sync-summary-grid" aria-label="同步摘要">
                 <InfoBlock label="创建" value={`${summary.create}`} />
@@ -1416,10 +1540,30 @@ function SyncView({
                 <InfoBlock label="备份" value={`${summary.backup}`} />
                 <InfoBlock label="软链接" value={`${summary.symlink}`} />
                 <InfoBlock label="跳过" value={`${summary.noop}`} />
-                <InfoBlock label="阻塞" value={`${plan.blockedConflicts.length}`} />
+                <InfoBlock label="阻塞" value={`${plan?.blockedConflicts.length ?? 0}`} />
               </div>
             )}
-            {plan.preconditions.length > 0 && (
+
+            {!plan && (
+              <details className="confirm-details">
+                <summary>查看预计操作说明</summary>
+                <span>
+                  {syncMode === "quick"
+                    ? quickMethod === "copy"
+                      ? "复制副本会让每个目标 Agent 拥有独立副本，后续更改互不影响。"
+                      : "创建软链接会让目标 Agent 指向当前来源位置，不会复制中心库副本。"
+                    : "中心库同步会先创建中心库副本，再在目标 Agent 中创建指向中心库的软链接。"}
+                </span>
+              </details>
+            )}
+
+            <div className="confirm-note">
+              <strong>说明</strong>
+              <span>{syncMode === "managed" ? "先复制到中心库，再用软链接分发到目标 Agent。" : "快速迁移不使用中心库，可选择复制副本或创建软链接。"}</span>
+              <span>不会直接覆盖不同内容；冲突会在预览中阻塞。</span>
+            </div>
+
+            {plan && plan.preconditions.length > 0 && (
               <div className="precondition-note">
                 <strong>执行前会先确认</strong>
                 <span>{plan.preconditions.join(" · ")}</span>
@@ -1431,55 +1575,121 @@ function SyncView({
                 <span>计划会先把目标位置的现有内容移动到备份路径；如需恢复，可将备份内容复制回对应目标路径。</span>
               </div>
             )}
-            {blocked && (
+            {blocked && plan && (
               <div className="banner warning">
                 <AlertTriangle size={17} />
                 <span>{plan.blockedConflicts.join(" · ")}</span>
               </div>
             )}
-            <div className="operation-list">
-              {groups.map((group) => (
-                <section className="operation-group" key={group.key}>
-                  <div className="operation-group-heading">
-                    <strong>{group.title}</strong>
-                    <span>{group.operations.length} 项操作</span>
-                  </div>
-                  {group.operations.map((operation) => (
-                    <div className={`operation ${operation.status}`} key={operation.id}>
-                      <StatusIcon status={operation.status} />
-                      <div>
-                        <strong>{operation.message}</strong>
-                        <small>{operationTypeLabel(operation.opType)} · {operationStatusLabel(operation.status)}</small>
-                        {(operation.sourcePath || operation.targetPath || operation.backupPath) && (
-                          <details className="operation-paths">
-                            <summary>查看路径与恢复信息</summary>
-                            {operation.sourcePath && <code>来源 {operation.sourcePath}</code>}
-                            {operation.targetPath && <code>目标 {operation.targetPath}</code>}
-                            {operation.backupPath && <code>备份 {operation.backupPath}</code>}
-                            {operation.backupPath && operation.targetPath && (
-                              <span>恢复方式：把备份路径内容复制回目标路径。</span>
-                            )}
-                          </details>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </section>
-              ))}
-            </div>
-          </>
-        )}
 
-        {applyResult && (
-          <div className={`apply-result ${applyResult.errors.length ? "error" : "success"}`}>
-            <strong>{applyResult.errors.length ? "执行完成，但有错误" : "执行完成"}</strong>
-            <span>{applyResult.appliedOperations.length} 已执行 · {applyResult.skippedOperations.length} 已跳过</span>
-            {applyResult.errors.map((item) => <code key={item}>{item}</code>)}
-          </div>
-        )}
+            <details className="confirm-details" open={generatedPlan}>
+              <summary>{generatedPlan ? "查看操作详情" : "生成预览后查看操作详情"}</summary>
+              {generatedPlan && (
+                <div className="operation-list compact">
+                  {groups.map((group) => (
+                    <section className="operation-group" key={group.key}>
+                      <div className="operation-group-heading">
+                        <strong>{group.title}</strong>
+                        <span>{group.operations.length} 项操作</span>
+                      </div>
+                      {group.operations.map((operation) => (
+                        <div className={`operation ${operation.status}`} key={operation.id}>
+                          <StatusIcon status={operation.status} />
+                          <div>
+                            <strong>{operation.message}</strong>
+                            <small>{operationTypeLabel(operation.opType)} · {operationStatusLabel(operation.status)}</small>
+                            {(operation.sourcePath || operation.targetPath || operation.backupPath) && (
+                              <details className="operation-paths">
+                                <summary>查看路径与恢复信息</summary>
+                                {operation.sourcePath && <code>来源 {operation.sourcePath}</code>}
+                                {operation.targetPath && <code>目标 {operation.targetPath}</code>}
+                                {operation.backupPath && <code>备份 {operation.backupPath}</code>}
+                                {operation.backupPath && operation.targetPath && (
+                                  <span>恢复方式：把备份路径内容复制回目标路径。</span>
+                                )}
+                              </details>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </section>
+                  ))}
+                </div>
+              )}
+            </details>
+
+            {applyResult && (
+              <div className={`apply-result ${applyResult.errors.length ? "error" : "success"}`}>
+                <strong>{applyResult.errors.length ? "执行完成，但有错误" : "执行完成"}</strong>
+                <span>{applyResult.appliedOperations.length} 已执行 · {applyResult.skippedOperations.length} 已跳过</span>
+                {applyResult.errors.map((item) => <code key={item}>{item}</code>)}
+              </div>
+            )}
+          </aside>
+        </div>
+
+        <div className="sync-action-bar">
+          <button className="secondary-button large" onClick={onGoSkills}>
+            <Layers3 size={16} />
+            返回选择 Skills
+          </button>
+          {generatedPlan ? (
+            <div className="button-pair">
+              <button className="secondary-button large" disabled={actionDisabled} onClick={previewPlan}>
+                重新生成预览
+              </button>
+              <button className="primary-button large" disabled={!plan || blocked || busy} onClick={onApply}>
+                <CopyCheck size={16} />
+                执行同步计划
+              </button>
+            </div>
+          ) : (
+            <button className="primary-button large" disabled={actionDisabled} onClick={previewPlan}>
+              {previewLabel}
+              <ArrowRight size={16} />
+            </button>
+          )}
+        </div>
       </section>
     </div>
   );
+}
+
+function SyncSection({ number, title, children }: { number: string; title: string; children: ReactNode }) {
+  return (
+    <section className="sync-section">
+      <div className="sync-section-title">
+        <span>{number}</span>
+        <strong>{title}</strong>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function targetPathPreview(agent: AgentRecord, scope: "global" | "project") {
+  return scope === "project" ? agent.projectRoots[0] : agent.globalRoots[0];
+}
+
+function draftPlanSentence(mode: SyncMode, method: QuickMigrationMethod, targetCount: number) {
+  if (targetCount === 0) return "请选择至少 1 个目标 Agent。";
+  if (mode === "managed") {
+    return `将导入中心库 1 个 Skill，并创建 ${targetCount} 个软链接。`;
+  }
+  return method === "copy"
+    ? `将复制 1 个 Skill 到 ${targetCount} 个 Agent。`
+    : `将在 ${targetCount} 个 Agent 中创建软链接。`;
+}
+
+function planSummarySentence(plan: SyncPlan, summary: ReturnType<typeof syncPlanSummary> | null) {
+  if (!summary) return "同步预览已生成。";
+  if (plan.blockedConflicts.length > 0) return `发现 ${plan.blockedConflicts.length} 个阻塞，请先处理后再执行。`;
+  const parts = [];
+  if (summary.create > 0) parts.push(`创建 ${summary.create} 项`);
+  if (summary.symlink > 0) parts.push(`创建 ${summary.symlink} 个软链接`);
+  if (summary.backup > 0) parts.push(`备份 ${summary.backup} 项`);
+  if (summary.noop > 0) parts.push(`跳过 ${summary.noop} 项`);
+  return `${parts.join("，") || "无需变更"}，无阻塞。`;
 }
 
 function SettingsSheet({
@@ -1650,6 +1860,7 @@ function syncPlanSummary(plan: SyncPlan) {
     (summary, operation) => {
       if (operation.opType === "create-root") summary.create += 1;
       if (operation.opType === "copy-to-library") summary.create += 1;
+      if (operation.opType === "copy-to-target") summary.create += 1;
       if (operation.opType === "remove-existing") summary.overwrite += 1;
       if (operation.opType === "backup-existing") {
         summary.backup += 1;
@@ -1684,9 +1895,10 @@ function inferOperationScope(operation: SyncOperation, agent: AgentRecord | null
 
 function operationTypeLabel(opType: string) {
   const labels: Record<string, string> = {
-    noop: "无需操作",
-    "copy-to-library": "复制到中心库",
-    "create-root": "创建根目录",
+	    noop: "无需操作",
+	    "copy-to-library": "复制到中心库",
+	    "copy-to-target": "复制到目标",
+	    "create-root": "创建根目录",
     "remove-existing": "移除现有项",
     "backup-existing": "备份现有项",
     "create-symlink": "创建软链接"
@@ -2025,7 +2237,7 @@ function demoSkill(id: string, name: string, description: string, agentIds: stri
   };
 }
 
-function demoPlan(skill: SkillRecord, targets: AgentTarget[], kind: "adopt" | "sync"): SyncPlan {
+function demoPlan(skill: SkillRecord, targets: AgentTarget[], kind: "adopt" | "sync" | "quick-migrate"): SyncPlan {
   const fallbackTargets = targets.length > 0 ? targets : [{ agentId: "codex", scope: "global" }];
   return {
     planId: `demo-${kind}-${Date.now()}`,
