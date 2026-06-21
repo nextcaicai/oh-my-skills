@@ -367,7 +367,7 @@ p {
   gap: 8px;
   min-height: 38px;
   padding: 0 17px;
-  border-radius: 8px;
+  border-radius: 999px;
   background: #2f3338;
   color: #f9fafb;
   cursor: pointer;
@@ -379,6 +379,26 @@ p {
 .agent-empty-button:disabled {
   cursor: wait;
   opacity: 0.72;
+}
+
+.empty-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.empty-actions .secondary-button,
+.empty-actions .agent-empty-button {
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-size: 14px;
+}
+
+.empty-actions .agent-empty-button {
+  box-shadow: none;
 }
 
 @keyframes empty-logo-cycle {

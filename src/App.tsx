@@ -77,6 +77,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
+  const [previouslyScanned, setPreviouslyScanned] = useState(false);
   const bootStartedRef = useRef(false);
 
   useEffect(() => {
@@ -163,6 +164,8 @@ export default function App() {
       setSkillLocks(demoSkillLocks);
       setInventory(demoInventory);
       setHasScanned(false);
+      const hadDemoData = (demoInventory?.agents?.length ?? 0) > 0 || (demoInventory?.skills?.length ?? 0) > 0;
+      setPreviouslyScanned(hadDemoData);
       setSelectedSkillId(null);
       setBusy("");
       return;
@@ -178,6 +181,8 @@ export default function App() {
       setSkillLocks(locks);
       setInventory(cachedInventory);
       setHasScanned(false);
+      const hadData = (cachedInventory?.agents?.length ?? 0) > 0 || (cachedInventory?.skills?.length ?? 0) > 0;
+      setPreviouslyScanned(hadData);
       setSelectedSkillId((current) => {
         if (current && cachedInventory?.skills.some((skill) => skill.id === current)) return current;
         return null;
@@ -202,6 +207,7 @@ export default function App() {
       setSkillLocks(demoSkillLocks);
       setSkillUpdateChecks({});
       setHasScanned(true);
+      setPreviouslyScanned(true);
       setBusy("");
       return;
     }
@@ -216,6 +222,7 @@ export default function App() {
       setInventory(next);
       setSkillUpdateChecks({});
       setHasScanned(true);
+      setPreviouslyScanned(true);
       setSelectedSkillId((current) => {
         if (current && next.skills.some((skill) => skill.id === current)) return current;
         return null;
@@ -582,7 +589,12 @@ export default function App() {
       <section className="content-frame">
         {view === "skills" && !hasScanned ? (
           <div className="agents-page empty-state-page">
-            <AgentDiscoveryEmptyState busy={busy} onRefresh={() => void refreshInventory()} />
+            <AgentDiscoveryEmptyState
+              busy={busy}
+              previouslyScanned={previouslyScanned}
+              onScan={() => void refreshInventory()}
+              onSkip={() => setHasScanned(true)}
+            />
           </div>
         ) : view === "skills" ? (
           <SkillsView
@@ -706,9 +718,21 @@ const emptyStateAgentIds = [
   "opencode"
 ];
 
-function AgentDiscoveryEmptyState({ busy, onRefresh }: { busy: string; onRefresh: () => void }) {
+function AgentDiscoveryEmptyState({
+  busy,
+  previouslyScanned = false,
+  onScan,
+  onSkip,
+}: {
+  busy: string;
+  previouslyScanned?: boolean;
+  onScan: () => void;
+  onSkip?: () => void;
+}) {
+  const isFirstUse = !previouslyScanned;
+
   return (
-    <section className="agent-empty-state" aria-label="发现 Agent 空状态">
+    <section className="agent-empty-state" aria-label="发现 Skills 空状态">
       <div className="agent-empty-visual" aria-hidden="true">
         {emptyStateAgentIds.map((agentId, index) => {
           const icon = agentIconAsset(agentId);
@@ -725,14 +749,48 @@ function AgentDiscoveryEmptyState({ busy, onRefresh }: { busy: string; onRefresh
           );
         })}
       </div>
+
       <div className="agent-empty-copy">
-        <strong>还没有扫描本地 Agent</strong>
-        <span>先扫描这台机器，看看哪些 Agent 已经可用。</span>
+        {isFirstUse ? (
+          <strong>先扫描这台电脑，看看有哪些 Skills 可用</strong>
+        ) : (
+          <span>本地可用 Skills 可能发生了变化，可以重新扫描或直接跳过</span>
+        )}
       </div>
-      <button className="agent-empty-button" disabled={Boolean(busy)} onClick={onRefresh} type="button">
-        {busy ? <Loader2 className="spin" size={16} /> : <Search size={16} />}
-        <span>扫描本地 Agent</span>
-      </button>
+
+      {isFirstUse ? (
+        <button
+          className="agent-empty-button"
+          disabled={Boolean(busy)}
+          onClick={onScan}
+          type="button"
+        >
+          {busy ? <Loader2 className="spin" size={16} /> : null}
+          <span>开始扫描</span>
+        </button>
+      ) : (
+        <div className="empty-actions">
+          <button
+            className="agent-empty-button"
+            disabled={Boolean(busy)}
+            onClick={onScan}
+            type="button"
+          >
+            {busy ? <Loader2 className="spin" size={16} /> : null}
+            <span>重新扫描</span>
+          </button>
+          {onSkip && (
+            <button
+              className="secondary-button"
+              disabled={Boolean(busy)}
+              onClick={onSkip}
+              type="button"
+            >
+              直接跳过
+            </button>
+          )}
+        </div>
+      )}
     </section>
   );
 }
