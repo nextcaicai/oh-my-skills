@@ -164,26 +164,34 @@ export default function App() {
       return;
     }
     try {
-      const loaded = await invoke<AppSettings>("get_settings");
+      const [loaded, locks] = await Promise.all([
+        invoke<AppSettings>("get_settings"),
+        readSkillLocks()
+      ]);
       setSettings(loaded);
       setDraftSettings(loaded);
-      await refreshSkillLocks();
-      await refreshInventory();
+      setSkillLocks(locks);
+      setBusy("");
+      window.setTimeout(() => {
+        void refreshInventory({ background: true });
+      }, 0);
     } catch (reason) {
       setError(String(reason));
-    } finally {
       setBusy("");
     }
   }
 
-  async function refreshInventory() {
-    setBusy("扫描本机 Agent 与 Skills");
+  async function refreshInventory(options: { background?: boolean } = {}) {
+    setBusy(options.background ? "后台扫描本机 Agent 与 Skills" : "扫描本机 Agent 与 Skills");
     setError(null);
     try {
-      await refreshSkillLocks();
-      const next = await invoke<InventorySnapshot>("scan_inventory", {
-        options: { includeOrphaned: false }
-      });
+      const [locks, next] = await Promise.all([
+        readSkillLocks(),
+        invoke<InventorySnapshot>("scan_inventory", {
+          options: { includeOrphaned: false }
+        })
+      ]);
+      setSkillLocks(locks);
       setInventory(next);
       setSkillUpdateChecks({});
       setSelectedSkillId((current) => {
@@ -202,12 +210,14 @@ export default function App() {
   }
 
   async function refreshSkillLocks() {
+    setSkillLocks(await readSkillLocks());
+  }
+
+  async function readSkillLocks() {
     if (!isTauriRuntime()) {
-      setSkillLocks(demoSkillLocks);
-      return;
+      return demoSkillLocks;
     }
-    const locks = await invoke<Record<string, SkillLockEntry>>("read_skill_lock");
-    setSkillLocks(locks);
+    return invoke<Record<string, SkillLockEntry>>("read_skill_lock");
   }
 
   async function previewSkillsSync(skills = queuedSkills, targets: AgentTarget[] = []) {
