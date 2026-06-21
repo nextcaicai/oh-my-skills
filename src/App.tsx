@@ -1187,12 +1187,20 @@ function ProjectWorkspaceEmptyState({
       </div>
 
       <div className="empty-actions project-empty-actions">
-        <button className="agent-empty-button" onClick={onAddProject} type="button">
-          <FolderPlus size={16} />
-          <span>关联项目工作区</span>
+        <button
+          className="agent-empty-button"
+          onClick={onAddProject}
+          title="手动选择一个包含 Skills 的项目目录"
+          type="button"
+        >
+          <span>关联项目</span>
         </button>
-        <button className="secondary-button" onClick={onDiscoverProjects} type="button">
-          <Search size={16} />
+        <button
+          className="secondary-button"
+          onClick={onDiscoverProjects}
+          title="从上级目录自动查找一个或多个包含 Skills 的项目"
+          type="button"
+        >
           扫描发现
         </button>
       </div>
