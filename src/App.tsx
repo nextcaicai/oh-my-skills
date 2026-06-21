@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   CopyCheck,
   FileText,
@@ -76,16 +77,24 @@ export default function App() {
   const [syncMode, setSyncMode] = useState<SyncMode>("quick");
   const [busy, setBusy] = useState("启动中");
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [previouslyScanned, setPreviouslyScanned] = useState(false);
   const bootStartedRef = useRef(false);
+  const discoveryRunRef = useRef(0);
 
   useEffect(() => {
     if (bootStartedRef.current) return;
     bootStartedRef.current = true;
     void boot();
   }, []);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = window.setTimeout(() => setToast(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const agents = useMemo(
     () =>
@@ -414,6 +423,12 @@ export default function App() {
   }
 
   async function addProjectPath(path: string) {
+    const valid = await validateProjectWorkspacePath(path);
+    if (!valid) {
+      setToast("该项目没有 skills，暂时无法添加");
+      return;
+    }
+
     const projectFolders = Array.from(new Set([...settings.projectFolders, path]));
     const saved = await saveProjectFolders(projectFolders, "关联项目工作区");
     if (!saved) return;
@@ -425,6 +440,25 @@ export default function App() {
     );
   }
 
+  async function validateProjectWorkspacePath(path: string) {
+    if (settings.projectFolders.some((folder) => samePath(folder, path))) return true;
+    if (!isTauriRuntime()) return true;
+
+    setBusy("检查项目 Skills");
+    setError(null);
+    try {
+      const candidates = await invoke<ProjectWorkspaceCandidate[]>("discover_project_workspaces", {
+        basePath: path
+      });
+      return candidates.some((candidate) => samePath(candidate.path, path) && candidate.skillCount > 0);
+    } catch (reason) {
+      setError(String(reason));
+      return false;
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function addProjectWorkspace() {
     const selected = await open({ directory: true, multiple: false, title: "关联项目工作区" });
     if (typeof selected !== "string") return;
@@ -434,6 +468,8 @@ export default function App() {
   async function discoverProjectWorkspaces() {
     const selected = await open({ directory: true, multiple: false, title: "扫描发现项目工作区" });
     if (typeof selected !== "string") return;
+    const runId = discoveryRunRef.current + 1;
+    discoveryRunRef.current = runId;
     setBusy("扫描发现项目工作区");
     setError(null);
     setSkillWorkspace("project");
@@ -441,18 +477,39 @@ export default function App() {
     setDiscoveryBasePath(selected);
     try {
       if (!isTauriRuntime()) {
+        if (discoveryRunRef.current !== runId) return;
         setDiscoveredProjects([]);
+        setDiscoveryBasePath(null);
+        setToast("该项目没有 skills，暂时无法添加");
         return;
       }
       const candidates = await invoke<ProjectWorkspaceCandidate[]>("discover_project_workspaces", {
         basePath: selected
       });
+      if (discoveryRunRef.current !== runId) return;
+      if (candidates.length === 0) {
+        setDiscoveredProjects([]);
+        setDiscoveryBasePath(null);
+        setToast("该项目没有 skills，暂时无法添加");
+        return;
+      }
       setDiscoveredProjects(candidates);
     } catch (reason) {
-      setError(String(reason));
+      if (discoveryRunRef.current === runId) {
+        setError(String(reason));
+      }
     } finally {
-      setBusy("");
+      if (discoveryRunRef.current === runId) {
+        setBusy("");
+      }
     }
+  }
+
+  function closeProjectDiscovery() {
+    discoveryRunRef.current += 1;
+    setDiscoveredProjects([]);
+    setDiscoveryBasePath(null);
+    setBusy((current) => current === "扫描发现项目工作区" ? "" : current);
   }
 
   async function removeProjectWorkspace(folder: string) {
@@ -587,6 +644,8 @@ export default function App() {
         </div>
       )}
 
+      {toast && <div className="toast" role="status">{toast}</div>}
+
       <section className="content-frame">
         {view === "skills" && !hasScanned ? (
           <div className="agents-page empty-state-page">
@@ -639,6 +698,7 @@ export default function App() {
             onRefresh={() => void refreshInventory()}
             onAddProject={() => void addProjectWorkspace()}
             onDiscoverProjects={() => void discoverProjectWorkspaces()}
+            onCloseDiscovery={closeProjectDiscovery}
             onLinkDiscoveredProject={(path) => void addProjectPath(path)}
             onRemoveProject={(folder) => void removeProjectWorkspace(folder)}
           />
@@ -827,6 +887,7 @@ function SkillsView({
   onRefresh,
   onAddProject,
   onDiscoverProjects,
+  onCloseDiscovery,
   onLinkDiscoveredProject,
   onRemoveProject
 }: {
@@ -860,12 +921,15 @@ function SkillsView({
   onRefresh: () => void;
   onAddProject: () => void;
   onDiscoverProjects: () => void;
+  onCloseDiscovery: () => void;
   onLinkDiscoveredProject: (path: string) => void;
   onRemoveProject: (folder: string) => void;
 }) {
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [projectScrollState, setProjectScrollState] = useState({ left: false, right: false });
   const agentMenuRef = useRef<HTMLDivElement>(null);
+  const projectBarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!agentMenuOpen) return undefined;
@@ -884,6 +948,39 @@ function SkillsView({
       document.removeEventListener("keydown", onEsc);
     };
   }, [agentMenuOpen]);
+
+  const updateProjectScrollState = () => {
+    const element = projectBarRef.current;
+    if (!element) {
+      setProjectScrollState({ left: false, right: false });
+      return;
+    }
+
+    const maxScroll = element.scrollWidth - element.clientWidth;
+    setProjectScrollState({
+      left: element.scrollLeft > 2,
+      right: element.scrollLeft < maxScroll - 2
+    });
+  };
+
+  useEffect(() => {
+    window.requestAnimationFrame(updateProjectScrollState);
+  }, [projectFolders, selectedProjectFolder, workspace]);
+
+  useEffect(() => {
+    window.addEventListener("resize", updateProjectScrollState);
+    return () => window.removeEventListener("resize", updateProjectScrollState);
+  }, []);
+
+  function scrollProjectBar(direction: "left" | "right") {
+    const element = projectBarRef.current;
+    if (!element) return;
+    element.scrollBy({
+      left: direction === "left" ? -340 : 340,
+      behavior: "smooth"
+    });
+    window.setTimeout(updateProjectScrollState, 260);
+  }
 
   const selectedAgentLabel = agentFilter === "all"
     ? "全部 Agent"
@@ -1016,16 +1113,15 @@ function SkillsView({
           </div>
         )}
 
-        {isProjectWorkspace && !hasProjectWorkspaces && (discovering || discoveryBasePath || discoveredProjects.length > 0) && (
+        {isProjectWorkspace && (discovering || discoveryBasePath || discoveredProjects.length > 0) && (
           <section className="discovery-panel">
             <div className="discovery-heading">
               <span>
                 <strong>扫描发现</strong>
                 {discoveryBasePath && <small>{discoveryBasePath}</small>}
               </span>
-              <button className="secondary-button" onClick={onDiscoverProjects} type="button">
-                {discovering ? <Loader2 className="spin" size={16} /> : <Search size={16} />}
-                重新扫描
+              <button className="icon-button plain" onClick={onCloseDiscovery} title="关闭扫描发现" type="button">
+                <XCircle size={18} />
               </button>
             </div>
             <div className="discovery-list">
@@ -1051,43 +1147,64 @@ function SkillsView({
                   </button>
                 </article>
               ))}
-              {!discovering && discoveryBasePath && discoveredProjects.length === 0 && (
-                <div className="empty-inline">
-                  <FileText size={20} />
-                  <span>没有发现包含项目级 Skills 的工作区。</span>
-                </div>
-              )}
             </div>
           </section>
         )}
 
         {isProjectWorkspace && hasProjectWorkspaces && (
-          <div className="project-workspace-bar" aria-label="已关联项目工作区">
-            {projectFolders.map((folder) => {
-              const stats = projectStats(folder, allSkills);
-              const active = selectedProjectFolder === folder;
-              return (
-                <button
-                  className={`project-chip ${active ? "active" : ""}`}
-                  key={folder}
-                  onClick={() => onSelectProject(folder)}
-                  type="button"
-                >
-                  <span>
-                    <strong>{projectName(folder)}</strong>
-                    <small>{folder}</small>
-                  </span>
-                  <em>{stats.skillCount} Skills · {stats.agentLabels.length || 0} Agents</em>
-                  <XCircle
-                    size={15}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onRemoveProject(folder);
-                    }}
-                  />
-                </button>
-              );
-            })}
+          <div className="project-workspace-shell">
+            {projectScrollState.left && (
+              <button
+                className="project-scroll-button left"
+                onClick={() => scrollProjectBar("left")}
+                title="向左滑动"
+                type="button"
+              >
+                <ChevronLeft size={17} />
+              </button>
+            )}
+            <div
+              className="project-workspace-bar"
+              aria-label="已关联项目工作区"
+              onScroll={updateProjectScrollState}
+              ref={projectBarRef}
+            >
+              {projectFolders.map((folder) => {
+                const stats = projectStats(folder, allSkills);
+                const active = selectedProjectFolder === folder;
+                return (
+                  <button
+                    className={`project-chip ${active ? "active" : ""}`}
+                    key={folder}
+                    onClick={() => onSelectProject(folder)}
+                    type="button"
+                  >
+                    <span>
+                      <strong>{projectName(folder)}</strong>
+                      <small>{folder}</small>
+                    </span>
+                    <em>{stats.skillCount} Skills</em>
+                    <XCircle
+                      size={15}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onRemoveProject(folder);
+                      }}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+            {projectScrollState.right && (
+              <button
+                className="project-scroll-button right"
+                onClick={() => scrollProjectBar("right")}
+                title="向右滑动"
+                type="button"
+              >
+                <ChevronRight size={17} />
+              </button>
+            )}
           </div>
         )}
 
@@ -2310,6 +2427,10 @@ function githubUrlFromDetail(detail: string) {
 
 function compactPath(path: string) {
   return path.replace(/^\/Users\/[^/]+/, "~");
+}
+
+function samePath(left: string, right: string) {
+  return left.replace(/\/+$/, "") === right.replace(/\/+$/, "");
 }
 
 function projectSkillsForFolder(skills: SkillRecord[], folder: string | null): SkillRecord[] {
