@@ -73,6 +73,7 @@ export default function App() {
   const [updatingSkillIds, setUpdatingSkillIds] = useState<Set<string>>(new Set());
   const [syncPlan, setSyncPlan] = useState<SyncPlan | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
+  const [syncMode, setSyncMode] = useState<SyncMode>("quick");
   const [busy, setBusy] = useState("启动中");
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -283,7 +284,7 @@ export default function App() {
     const skill = skills[0];
     const source = skill ? firstValidInstallation(skill) : null;
     if (!skill || !source) return;
-    setBusy("生成迁移预览");
+    setBusy("生成同步预览");
     setError(null);
     setApplyResult(null);
     if (!isTauriRuntime()) {
@@ -311,33 +312,14 @@ export default function App() {
     }
   }
 
-  async function previewAdopt(skill: SkillRecord) {
-    const source = firstValidInstallation(skill);
-    if (!source) return;
-    setBusy("生成导入预览");
-    setError(null);
-    setApplyResult(null);
-    if (!isTauriRuntime()) {
-      setSyncPlan(demoPlan(skill, [], "adopt"));
-      setView("sync");
-      setBusy("");
-      return;
-    }
-    try {
-      const plan = await invoke<SyncPlan>("preview_adopt", {
-        source: {
-          installationId: source.id,
-          entryPath: source.entryPath,
-          slug: skill.slug
-        }
-      });
-      setSyncPlan(plan);
-      setView("sync");
-    } catch (reason) {
-      setError(String(reason));
-    } finally {
-      setBusy("");
-    }
+  function previewAdopt(skill: SkillRecord) {
+    setSelectedSkillIds((current) => {
+      const next = new Set(current);
+      next.add(skill.id);
+      return next;
+    });
+    setView("sync");
+    setSyncMode("managed");
   }
 
   async function applyPlan() {
@@ -495,8 +477,13 @@ export default function App() {
   }
 
   function selectForSync(skill: SkillRecord) {
-    setSelectedSkillIds((current) => new Set(current).add(skill.id));
+    setSelectedSkillIds((current) => {
+      const next = new Set(current);
+      next.add(skill.id);
+      return next;
+    });
     setView("sync");
+    setSyncMode("quick");
   }
 
   async function refreshSkillsShUpdateChecks(skills: SkillRecord[], locks: Record<string, SkillLockEntry>) {
@@ -661,6 +648,8 @@ export default function App() {
             plan={syncPlan}
             applyResult={applyResult}
             busy={Boolean(busy)}
+            syncMode={syncMode}
+            onSyncModeChange={setSyncMode}
             onRemoveSkill={(id) => {
               setSelectedSkillIds((current) => {
                 const next = new Set(current);
@@ -1373,7 +1362,7 @@ function SkillDetail({
           导入中心库
         </button>
         <button className="primary-button" onClick={onSelectForSync}>
-          加入同步队列
+          快速同步
         </button>
       </div>
     </div>
@@ -1411,7 +1400,9 @@ function SyncView({
   onPreviewProject,
   onPreviewQuick,
   onApply,
-  onGoSkills
+  onGoSkills,
+  syncMode,
+  onSyncModeChange
 }: {
   agents: AgentRecord[];
   queuedSkills: SkillRecord[];
@@ -1425,8 +1416,9 @@ function SyncView({
   onPreviewQuick: (method: QuickMigrationMethod, targets: AgentTarget[]) => void;
   onApply: () => void;
   onGoSkills: () => void;
+  syncMode: SyncMode;
+  onSyncModeChange: (mode: SyncMode) => void;
 }) {
-  const [syncMode, setSyncMode] = useState<SyncMode>("quick");
   const [quickMethod, setQuickMethod] = useState<QuickMigrationMethod>("copy");
   const [targetScope, setTargetScope] = useState<"global" | "project">("global");
   const [targetPickerOpen, setTargetPickerOpen] = useState(false);
@@ -1450,7 +1442,7 @@ function SyncView({
   const summary = plan ? syncPlanSummary(plan) : null;
   const groups = plan ? groupedOperations(plan.operations, agents) : [];
   const actionDisabled = !selectedSkill || selectedTargets.length === 0 || busy;
-  const previewLabel = syncMode === "quick" ? "生成迁移预览" : "生成中心库同步预览";
+  const previewLabel = syncMode === "quick" ? "生成同步预览" : "生成中心库同步预览";
   const generatedPlan = Boolean(plan);
   const sourcePath = selectedSource?.entryPath ?? "";
   const centralPath = selectedSkill ? `${settings.libraryPath}/${selectedSkill.slug}` : "";
@@ -1486,14 +1478,14 @@ function SyncView({
     <div className="sync-page">
       <section className="sync-main-pane">
         <div className="sync-mode-grid" aria-label="同步模式">
-          <button className={`sync-mode-card ${syncMode === "quick" ? "active" : ""}`} onClick={() => setSyncMode("quick")} type="button">
+          <button className={`sync-mode-card ${syncMode === "quick" ? "active" : ""}`} onClick={() => onSyncModeChange("quick")} type="button">
             <CopyCheck size={24} />
             <span>
-              <strong>快速迁移 <em>最快完成</em></strong>
+              <strong>快速同步 <em>最快完成</em></strong>
               <small>直接复制或创建软链接到目标 Agent，不使用中心库</small>
             </span>
           </button>
-          <button className={`sync-mode-card ${syncMode === "managed" ? "active" : ""}`} onClick={() => setSyncMode("managed")} type="button">
+          <button className={`sync-mode-card ${syncMode === "managed" ? "active" : ""}`} onClick={() => onSyncModeChange("managed")} type="button">
             <Link2 size={24} />
             <span>
               <strong>纳入中心库并同步 <em>长期管理</em></strong>
@@ -1527,7 +1519,7 @@ function SyncView({
             </SyncSection>
 
             {syncMode === "quick" ? (
-              <SyncSection number="2" title="迁移方式">
+              <SyncSection number="2" title="同步方式">
                 <div className="option-grid two">
                   <button className={`choice-card ${quickMethod === "copy" ? "active" : ""}`} onClick={() => setQuickMethod("copy")} type="button">
                     <CopyCheck size={20} />
@@ -1659,7 +1651,7 @@ function SyncView({
 
             <div className="confirm-note">
               <strong>说明</strong>
-              <span>{syncMode === "managed" ? "先复制到中心库，再用软链接分发到目标 Agent。" : "快速迁移不使用中心库，可选择复制副本或创建软链接。"}</span>
+              <span>{syncMode === "managed" ? "先复制到中心库，再用软链接分发到目标 Agent。" : "快速同步不使用中心库，可选择复制副本或创建软链接。"}</span>
               <span>不会直接覆盖不同内容；冲突会在预览中阻塞。</span>
             </div>
 
