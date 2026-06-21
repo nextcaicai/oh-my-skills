@@ -1358,7 +1358,8 @@ function SyncView({
   const [syncMode, setSyncMode] = useState<SyncMode>("quick");
   const [quickMethod, setQuickMethod] = useState<QuickMigrationMethod>("copy");
   const [targetScope, setTargetScope] = useState<"global" | "project">("global");
-  const [selectedTargetIds, setSelectedTargetIds] = useState<Set<string>>(() => new Set(agents.map((agent) => agent.id)));
+  const [targetPickerOpen, setTargetPickerOpen] = useState(false);
+  const [selectedTargetIds, setSelectedTargetIds] = useState<Set<string>>(() => new Set(agents.slice(0, 3).map((agent) => agent.id)));
   const selectedSkill = queuedSkills[0] ?? null;
   const selectedSource = selectedSkill ? firstValidInstallation(selectedSkill) : null;
 
@@ -1367,11 +1368,12 @@ function SyncView({
       const validIds = new Set(agents.map((agent) => agent.id));
       const next = new Set([...current].filter((id) => validIds.has(id)));
       if (next.size > 0) return next;
-      return new Set(agents.map((agent) => agent.id));
+      return new Set(agents.slice(0, 3).map((agent) => agent.id));
     });
   }, [agents]);
 
   const selectedTargets = agents.filter((agent) => selectedTargetIds.has(agent.id));
+  const availableTargets = agents.filter((agent) => !selectedTargetIds.has(agent.id));
   const targets = selectedTargets.map((agent) => ({ agentId: agent.id, scope: targetScope }));
   const blocked = Boolean(plan?.blockedConflicts.length);
   const summary = plan ? syncPlanSummary(plan) : null;
@@ -1392,6 +1394,11 @@ function SyncView({
       else next.add(agentId);
       return next;
     });
+  }
+
+  function addTarget(agentId: string) {
+    setSelectedTargetIds((current) => new Set(current).add(agentId));
+    setTargetPickerOpen(false);
   }
 
   function previewPlan() {
@@ -1481,21 +1488,43 @@ function SyncView({
             )}
 
             <SyncSection number="3" title="目标 Agent（可多选）">
-              <div className="target-chip-grid">
-                {agents.map((agent) => {
-                  const selected = selectedTargetIds.has(agent.id);
-                  const pathPreview = targetPathPreview(agent, targetScope);
-                  return (
-                    <button className={`target-chip ${selected ? "selected" : ""}`} key={agent.id} onClick={() => toggleTarget(agent.id)} type="button">
-                      <AgentIcon agent={agent} />
-                      <span>
+              <div className="target-picker">
+                <div className="selected-target-row">
+                  {selectedTargets.map((agent) => {
+                    const pathPreview = targetPathPreview(agent, targetScope);
+                    return (
+                      <button className="selected-target-chip" key={agent.id} onClick={() => toggleTarget(agent.id)} title={pathPreview ? compactPath(pathPreview) : "移除目标"} type="button">
+                        <Check size={15} />
+                        <AgentIcon agent={agent} />
                         <strong>{agent.label}</strong>
-                        <small>{pathPreview ? compactPath(pathPreview) : "暂无项目路径"}</small>
-                      </span>
-                      {selected && <Check size={16} />}
+                      </button>
+                    );
+                  })}
+                  <div className="target-add-wrap">
+                    <button className="target-add-button" onClick={() => setTargetPickerOpen((open) => !open)} type="button">
+                      <FolderPlus size={16} />
+                      添加
                     </button>
-                  );
-                })}
+                    {targetPickerOpen && (
+                      <div className="target-add-menu" role="menu">
+                        {availableTargets.map((agent) => {
+                          const pathPreview = targetPathPreview(agent, targetScope);
+                          return (
+                            <button key={agent.id} onClick={() => addTarget(agent.id)} type="button">
+                              <AgentIcon agent={agent} />
+                              <span>
+                                <strong>{agent.label}</strong>
+                                <small>{pathPreview ? compactPath(pathPreview) : "暂无项目路径"}</small>
+                              </span>
+                            </button>
+                          );
+                        })}
+                        {availableTargets.length === 0 && <span className="target-empty">所有 Agent 已添加</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {selectedTargets.length === 0 && <span className="target-helper">请添加至少 1 个目标 Agent。</span>}
               </div>
             </SyncSection>
 
@@ -1709,10 +1738,10 @@ function SettingsSheet({
 }) {
   return (
     <div className="sheet-backdrop">
-      <aside className="settings-sheet">
+      <aside className="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <div className="pane-title">
           <div>
-            <h1>工作区设置</h1>
+            <h1 id="settings-title">工作区设置</h1>
             <p>配置中心库、项目工作区和路径显示方式。</p>
           </div>
           <button className="icon-button" onClick={onClose} title="关闭">
@@ -1720,46 +1749,53 @@ function SettingsSheet({
           </button>
         </div>
 
-        <label className="field">
-          <span>中心库</span>
-          <input value={settings.libraryPath} onChange={(event) => onChange({ ...settings, libraryPath: event.target.value })} />
-          <small>中心库用于保存规范 Skill 副本；同步时会从这里链接或复制到目标 Agent。</small>
-        </label>
-        <label className="switch-row">
-          <input
-            type="checkbox"
-            checked={settings.showRawPaths}
-            onChange={(event) => onChange({ ...settings, showRawPaths: event.target.checked })}
-          />
-          显示原始文件路径
-        </label>
+        <div className="settings-content">
+          <section className="settings-section">
+            <label className="field">
+              <span>中心库</span>
+              <input value={settings.libraryPath} onChange={(event) => onChange({ ...settings, libraryPath: event.target.value })} />
+              <small>中心库用于保存规范 Skill 副本；同步时会从这里链接或复制到目标 Agent。</small>
+            </label>
+            <label className="switch-row">
+              <input
+                type="checkbox"
+                checked={settings.showRawPaths}
+                onChange={(event) => onChange({ ...settings, showRawPaths: event.target.checked })}
+              />
+              <span>显示原始文件路径</span>
+            </label>
+          </section>
 
-        <section className="settings-section">
-          <div className="section-heading">
-            <h2>项目目录</h2>
-            <button className="secondary-button" onClick={onAddProjectFolder}>
-              <FolderPlus size={16} />
-              添加
-            </button>
-          </div>
-          {settings.projectFolders.map((folder) => (
-            <div className="path-row" key={folder}>
-              <code>{folder}</code>
-              <button
-                className="icon-button subtle"
-                onClick={() => onChange({ ...settings, projectFolders: settings.projectFolders.filter((item) => item !== folder) })}
-              >
-                <XCircle size={16} />
+          <section className="settings-section">
+            <div className="section-heading">
+              <h2>项目目录</h2>
+              <button className="secondary-button" onClick={onAddProjectFolder}>
+                <FolderPlus size={16} />
+                添加
               </button>
             </div>
-          ))}
-          {settings.projectFolders.length === 0 && <p className="muted">还没有添加项目目录。</p>}
-        </section>
+            <div className="settings-path-list">
+              {settings.projectFolders.map((folder) => (
+                <div className="path-row" key={folder}>
+                  <code title={folder}>{folder}</code>
+                  <button
+                    className="icon-button subtle"
+                    onClick={() => onChange({ ...settings, projectFolders: settings.projectFolders.filter((item) => item !== folder) })}
+                    title="移除项目目录"
+                  >
+                    <XCircle size={16} />
+                  </button>
+                </div>
+              ))}
+              {settings.projectFolders.length === 0 && <p className="muted">还没有添加项目目录。</p>}
+            </div>
+          </section>
 
-        <section className="settings-section">
-          <h2>应用数据</h2>
-          <code className="path-code">{inventory?.appDataPath || "尚未扫描"}</code>
-        </section>
+          <section className="settings-section">
+            <h2>应用数据</h2>
+            <code className="path-code" title={inventory?.appDataPath || undefined}>{inventory?.appDataPath || "尚未扫描"}</code>
+          </section>
+        </div>
 
         <div className="sheet-actions">
           <button className="secondary-button" onClick={onClose}>取消</button>
