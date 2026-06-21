@@ -39,9 +39,8 @@ import type {
   SyncPlan
 } from "./types";
 
-type View = "agents" | "skills" | "sync";
+type View = "skills" | "sync";
 type SkillWorkspace = "global" | "project";
-type AgentViewFilter = "all" | "installed";
 type SyncMode = "quick" | "managed";
 type QuickMigrationMethod = "copy" | "symlink";
 
@@ -60,7 +59,7 @@ export default function App() {
   const [draftSettings, setDraftSettings] = useState<AppSettings>(defaultSettings);
   const [inventory, setInventory] = useState<InventorySnapshot | null>(null);
   const [skillLocks, setSkillLocks] = useState<Record<string, SkillLockEntry>>({});
-  const [view, setView] = useState<View>("agents");
+  const [view, setView] = useState<View>("skills");
   const [skillWorkspace, setSkillWorkspace] = useState<SkillWorkspace>("global");
   const [query, setQuery] = useState("");
   const [agentFilter, setAgentFilter] = useState("all");
@@ -77,6 +76,7 @@ export default function App() {
   const [busy, setBusy] = useState("启动中");
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hasScanned, setHasScanned] = useState(false);
   const bootStartedRef = useRef(false);
 
   useEffect(() => {
@@ -162,6 +162,7 @@ export default function App() {
       setDraftSettings(defaultSettings);
       setSkillLocks(demoSkillLocks);
       setInventory(demoInventory);
+      setHasScanned(false);
       setSelectedSkillId(null);
       setBusy("");
       return;
@@ -176,6 +177,7 @@ export default function App() {
       setDraftSettings(loaded);
       setSkillLocks(locks);
       setInventory(cachedInventory);
+      setHasScanned(false);
       setSelectedSkillId((current) => {
         if (current && cachedInventory?.skills.some((skill) => skill.id === current)) return current;
         return null;
@@ -195,6 +197,14 @@ export default function App() {
   async function refreshInventory() {
     setBusy("扫描本机 Agent 与 Skills");
     setError(null);
+    if (!isTauriRuntime()) {
+      setInventory(demoInventory);
+      setSkillLocks(demoSkillLocks);
+      setSkillUpdateChecks({});
+      setHasScanned(true);
+      setBusy("");
+      return;
+    }
     try {
       const [locks, next] = await Promise.all([
         readSkillLocks(),
@@ -205,6 +215,7 @@ export default function App() {
       setSkillLocks(locks);
       setInventory(next);
       setSkillUpdateChecks({});
+      setHasScanned(true);
       setSelectedSkillId((current) => {
         if (current && next.skills.some((skill) => skill.id === current)) return current;
         return null;
@@ -458,15 +469,6 @@ export default function App() {
     });
   }
 
-  function openAgentSkills(agent: AgentRecord) {
-    setAgentFilter(agent.id);
-    setQuery("");
-    setSkillWorkspace("global");
-    setView("skills");
-    const firstSkill = globalSkills.find((skill) => skill.installations.some((item) => item.agentId === agent.id));
-    setSelectedSkillId(firstSkill?.id ?? null);
-  }
-
   function toggleSkill(id: string) {
     setSelectedSkillIds((current) => {
       const next = new Set(current);
@@ -555,9 +557,6 @@ export default function App() {
           >
             <img src={appLogo} alt="Oh My Skills" />
           </button>
-          <TabButton active={view === "agents"} onClick={() => setView("agents")}>
-            发现 Agent
-          </TabButton>
           <TabButton active={view === "skills"} onClick={() => setView("skills")}>
             发现 Skills
           </TabButton>
@@ -581,19 +580,11 @@ export default function App() {
       )}
 
       <section className="content-frame">
-        {view === "agents" && (
-          <AgentsView
-            agents={agents}
-            skills={allSkills}
-            installedCount={installedAgents.length}
-            busy={busy}
-            onAgentClick={openAgentSkills}
-            onGoSkills={() => setView("skills")}
-            onRefresh={() => void refreshInventory()}
-          />
-        )}
-
-        {view === "skills" && (
+        {view === "skills" && !hasScanned ? (
+          <div className="agents-page empty-state-page">
+            <AgentDiscoveryEmptyState busy={busy} onRefresh={() => void refreshInventory()} />
+          </div>
+        ) : view === "skills" ? (
           <SkillsView
             agents={installedAgents}
             skills={filteredSkills}
@@ -638,7 +629,7 @@ export default function App() {
             onLinkDiscoveredProject={(path) => void addProjectPath(path)}
             onRemoveProject={(folder) => void removeProjectWorkspace(folder)}
           />
-        )}
+        ) : null}
 
         {view === "sync" && (
           <SyncView
@@ -671,6 +662,7 @@ export default function App() {
           settings={draftSettings}
           inventory={inventory}
           agents={installedAgents}
+          skills={allSkills}
           onChange={setDraftSettings}
           onClose={() => {
             setDraftSettings(settings);
@@ -701,101 +693,6 @@ function TabButton({
     <button className={`tab-button ${active ? "active" : ""}`} onClick={onClick}>
       <span>{children}</span>
     </button>
-  );
-}
-
-function AgentsView({
-  agents,
-  skills,
-  installedCount,
-  busy,
-  onAgentClick,
-  onGoSkills,
-  onRefresh
-}: {
-  agents: AgentRecord[];
-  skills: SkillRecord[];
-  installedCount: number;
-  busy: string;
-  onAgentClick: (agent: AgentRecord) => void;
-  onGoSkills: () => void;
-  onRefresh: () => void;
-}) {
-  const [agentViewFilter, setAgentViewFilter] = useState<AgentViewFilter>("installed");
-  const visibleAgents = agentViewFilter === "installed" ? agents.filter((agent) => agent.installed) : agents;
-  const hasScanData = agents.length > 0 || skills.length > 0;
-  const summary = agentViewFilter === "all"
-    ? `内置 ${agents.length} 个 Agent 的自动检测识别`
-    : busy || `已发现 Agent ${installedCount} 个 · Skills ${skills.length} 个`;
-
-  if (!hasScanData) {
-    return (
-      <div className="agents-page empty-state-page">
-        <AgentDiscoveryEmptyState busy={busy} onRefresh={onRefresh} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="agents-page">
-      <div className="agent-filter-tabs" role="tablist" aria-label="Agent 过滤">
-        <button
-          className={agentViewFilter === "all" ? "active" : ""}
-          type="button"
-          role="tab"
-          aria-selected={agentViewFilter === "all"}
-          onClick={() => setAgentViewFilter("all")}
-        >
-          全部
-        </button>
-        <button
-          className={agentViewFilter === "installed" ? "active" : ""}
-          type="button"
-          role="tab"
-          aria-selected={agentViewFilter === "installed"}
-          onClick={() => setAgentViewFilter("installed")}
-        >
-          已安装
-        </button>
-      </div>
-      <div className="toolbar-row">
-        <span>{summary}</span>
-      </div>
-
-      <section className="agent-list">
-        {visibleAgents.map((agent) => {
-          const signalSummary = agentSignalSummary(agent);
-          const disabled = agentViewFilter === "all" && !agent.installed;
-          return (
-            <button
-              className={`agent-card ${disabled ? "disabled" : ""}`}
-              disabled={disabled}
-              key={agent.id}
-              onClick={() => onAgentClick(agent)}
-            >
-              <AgentIcon agent={agent} />
-              <span className="agent-main">
-                <strong>{agent.label}</strong>
-                {signalSummary && <small>{signalSummary}</small>}
-              </span>
-              <span className="agent-count">
-                <strong>{agentSkillCount(agent.id, skills)}</strong>
-                <small>Skills</small>
-              </span>
-              <StatusPill status={agent.status} />
-              <ChevronRight size={18} />
-            </button>
-          );
-        })}
-        {visibleAgents.length === 0 && (
-          <div className="empty-list">
-            <ShieldCheck size={28} />
-            <strong>还没有检测到已安装 Agent</strong>
-            <span>可以重新扫描，或切到“全部”查看 Oh My Skills 支持的 Agent。</span>
-          </div>
-        )}
-      </section>
-    </div>
   );
 }
 
@@ -1836,6 +1733,7 @@ function SettingsSheet({
   settings,
   inventory,
   agents = [],
+  skills = [],
   onChange,
   onClose,
   onSave,
@@ -1844,6 +1742,7 @@ function SettingsSheet({
   settings: AppSettings;
   inventory: InventorySnapshot | null;
   agents?: AgentRecord[];
+  skills?: SkillRecord[];
   onChange: (settings: AppSettings) => void;
   onClose: () => void;
   onSave: () => void;
@@ -1852,6 +1751,7 @@ function SettingsSheet({
   const [settingsTab, setSettingsTab] = useState<"general" | "agents">("general");
 
   const installedCount = agents.length;
+  const skillsForCount = skills.length ? skills : (inventory?.skills ?? []);
 
   // Close on backdrop click (blank area) and Esc
   useEffect(() => {
@@ -1946,13 +1846,24 @@ function SettingsSheet({
             <div className="settings-agents-pane">
               {installedCount > 0 ? (
                 <div className="settings-agent-list">
-                  {agents.map((agent) => (
-                    <div className="settings-agent-row" key={agent.id}>
-                      <AgentIcon agent={agent} />
-                      <strong>{agent.label}</strong>
-                      <StatusPill status={agent.status} />
-                    </div>
-                  ))}
+                  {agents.map((agent) => {
+                    const count = agentSkillCount(agent.id, skillsForCount);
+                    const signal = agentSignalSummary(agent);
+                    return (
+                      <div className="settings-agent-row rich" key={agent.id}>
+                        <AgentIcon agent={agent} />
+                        <span className="agent-main">
+                          <strong>{agent.label}</strong>
+                          {signal && <small>{signal}</small>}
+                        </span>
+                        <span className="agent-count">
+                          <strong>{count}</strong>
+                          <small>Skills</small>
+                        </span>
+                        <StatusPill status={agent.status} />
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="settings-agent-empty">
@@ -1960,7 +1871,7 @@ function SettingsSheet({
                 </div>
               )}
               <p className="settings-agent-hint">
-                已发现 {installedCount} 个已安装 Agent，可在「发现 Agent」页面查看详情。
+                已发现 {installedCount} 个已安装 Agent。
               </p>
             </div>
           )}

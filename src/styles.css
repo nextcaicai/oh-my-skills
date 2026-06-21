@@ -2188,6 +2188,40 @@ p {
   font-weight: 700;
 }
 
+.settings-agent-row.rich {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+}
+
+.settings-agent-row.rich .agent-main {
+  display: block;
+}
+
+.settings-agent-row.rich .agent-main strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-agent-row.rich .agent-main small {
+  display: block;
+  margin-top: 1px;
+  color: rgba(23, 25, 28, 0.58);
+  font-size: 11px;
+}
+
+.settings-agent-row.rich .agent-count {
+  text-align: right;
+  margin-right: 4px;
+}
+
+.settings-agent-row.rich .agent-count strong {
+  font-size: 14px;
+}
+
 .settings-agent-empty {
   padding: 48px 20px;
   text-align: center;
