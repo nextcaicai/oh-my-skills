@@ -12,6 +12,7 @@ import {
   FolderPlus,
   Github,
   Globe2,
+  Home,
   Layers3,
   Link2,
   Loader2,
@@ -894,6 +895,7 @@ function SkillsView({
       : "关联一个项目工作区后，可以管理该项目内各 Agent 生效的 Skills。"
     : `管理这台机器上各 Agent 的全局 Skills，已发现 ${sourceSkills.length} 个。`;
   const hasProjectWorkspaces = projectFolders.length > 0;
+  const isProjectNoWorkspace = isProjectWorkspace && !hasProjectWorkspaces;
   const emptyTitle = isProjectWorkspace
     ? hasProjectWorkspaces
       ? "这个项目还没有项目级 Skills"
@@ -996,23 +998,25 @@ function SkillsView({
             </div>
           </div>
         </div>
-        <div className="skills-summary">
-          <span>{tabSummary}</span>
-          {isProjectWorkspace && (
-            <div className="button-pair compact">
-              <button className="secondary-button" onClick={onAddProject} type="button">
-                <FolderPlus size={16} />
-                关联项目
-              </button>
-              <button className="secondary-button" onClick={onDiscoverProjects} type="button">
-                <Search size={16} />
-                扫描发现
-              </button>
-            </div>
-          )}
-        </div>
+        {!isProjectNoWorkspace && (
+          <div className="skills-summary">
+            <span>{tabSummary}</span>
+            {isProjectWorkspace && (
+              <div className="button-pair compact">
+                <button className="secondary-button" onClick={onAddProject} type="button">
+                  <FolderPlus size={16} />
+                  关联项目
+                </button>
+                <button className="secondary-button" onClick={onDiscoverProjects} type="button">
+                  <Search size={16} />
+                  扫描发现
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
-        {isProjectWorkspace && (discovering || discoveryBasePath || discoveredProjects.length > 0) && (
+        {isProjectWorkspace && !hasProjectWorkspaces && (discovering || discoveryBasePath || discoveredProjects.length > 0) && (
           <section className="discovery-panel">
             <div className="discovery-heading">
               <span>
@@ -1087,66 +1091,112 @@ function SkillsView({
           </div>
         )}
 
-        <div className="skill-list-board">
-          <div className="skill-table-head">
-            <span />
-            <span>Skill</span>
-            <span>Agent 覆盖</span>
-            <span>状态</span>
-          </div>
+        {!isProjectNoWorkspace && (
+          <div className="skill-list-board">
+            <div className="skill-table-head">
+              <span />
+              <span>Skill</span>
+              <span>Agent 覆盖</span>
+              <span>状态</span>
+            </div>
 
-          <div className="skill-list">
-            {skills.map((skill) => {
-              const expanded = selectedSkill?.id === skill.id;
-              return (
-                <Fragment key={skill.id}>
-                  <SkillRow
-                    skill={skill}
-                    agents={agents}
-                    skillLocks={skillLocks}
-                    active={expanded}
-                    checked={selectedSkillIds.has(skill.id)}
-                    updateCheck={skillUpdateChecks[skill.id]}
-                    updating={updatingSkillIds.has(skill.id)}
-                    onSelect={() => onSelectSkill(expanded ? null : skill.id)}
-                    onToggle={() => onToggleSkill(skill.id)}
-                    onUpdate={() => onUpdateSkill(skill)}
-                  />
-                  {expanded && (
-                    <SkillDetail
+            <div className="skill-list">
+              {skills.map((skill) => {
+                const expanded = selectedSkill?.id === skill.id;
+                return (
+                  <Fragment key={skill.id}>
+                    <SkillRow
                       skill={skill}
-                      settings={settings}
+                      agents={agents}
                       skillLocks={skillLocks}
-                      onAdopt={() => onAdopt(skill)}
-                      onSelectForSync={() => onSelectForSync(skill)}
+                      active={expanded}
+                      checked={selectedSkillIds.has(skill.id)}
+                      updateCheck={skillUpdateChecks[skill.id]}
+                      updating={updatingSkillIds.has(skill.id)}
+                      onSelect={() => onSelectSkill(expanded ? null : skill.id)}
+                      onToggle={() => onToggleSkill(skill.id)}
+                      onUpdate={() => onUpdateSkill(skill)}
                     />
-                  )}
-                </Fragment>
-              );
-            })}
-            {skills.length === 0 && (
-              <div className="empty-list">
-                <FileText size={28} />
-                <strong>{emptyTitle}</strong>
-                <span>{query || agentFilter !== "all" ? "试试切换 Agent 或清空搜索。" : emptyBody}</span>
-                {isProjectWorkspace && !hasProjectWorkspaces && (
-                  <div className="button-pair">
-                    <button className="primary-button" onClick={onAddProject} type="button">
-                      <FolderPlus size={16} />
-                      关联项目工作区
-                    </button>
-                    <button className="secondary-button" onClick={onDiscoverProjects} type="button">
-                      <Search size={16} />
-                      扫描发现
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+                    {expanded && (
+                      <SkillDetail
+                        skill={skill}
+                        settings={settings}
+                        skillLocks={skillLocks}
+                        onAdopt={() => onAdopt(skill)}
+                        onSelectForSync={() => onSelectForSync(skill)}
+                      />
+                    )}
+                  </Fragment>
+                );
+              })}
+              {skills.length === 0 && (
+                <div className="empty-list">
+                  <FileText size={28} />
+                  <strong>{emptyTitle}</strong>
+                  <span>{query || agentFilter !== "all" ? "试试切换 Agent 或清空搜索。" : emptyBody}</span>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {isProjectNoWorkspace && !(discovering || discoveryBasePath || discoveredProjects.length > 0) && (
+          <ProjectWorkspaceEmptyState onAddProject={onAddProject} onDiscoverProjects={onDiscoverProjects} />
+        )}
       </section>
     </div>
+  );
+}
+
+function ProjectWorkspaceEmptyState({
+  onAddProject,
+  onDiscoverProjects
+}: {
+  onAddProject: () => void;
+  onDiscoverProjects: () => void;
+}) {
+  return (
+    <section className="project-empty-state" aria-label="项目工作区空状态">
+      <div className="project-empty-visual" aria-hidden="true">
+        <div className="project-empty-card card-back">
+          <span className="project-empty-icon small"><Home size={18} /></span>
+          <span className="project-empty-lines">
+            <i />
+            <i className="short" />
+          </span>
+        </div>
+        <div className="project-empty-card card-front">
+          <span className="project-empty-icon"><Home size={26} /></span>
+          <span className="project-empty-lines">
+            <i />
+            <i className="short" />
+          </span>
+        </div>
+        <div className="project-empty-card card-low">
+          <span className="project-empty-icon small"><Home size={18} /></span>
+          <span className="project-empty-lines">
+            <i />
+            <i className="short" />
+          </span>
+        </div>
+      </div>
+
+      <div className="agent-empty-copy project-empty-copy">
+        <strong>尚未关联项目工作区</strong>
+        <span>关联项目根目录后，这里会显示该项目内各 Agent 生效的 Skills。</span>
+      </div>
+
+      <div className="empty-actions project-empty-actions">
+        <button className="agent-empty-button" onClick={onAddProject} type="button">
+          <FolderPlus size={16} />
+          <span>关联项目工作区</span>
+        </button>
+        <button className="secondary-button" onClick={onDiscoverProjects} type="button">
+          <Search size={16} />
+          扫描发现
+        </button>
+      </div>
+    </section>
   );
 }
 
