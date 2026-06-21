@@ -1,0 +1,132 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - generic "主导航" [ref=e5]:
+      - button "Oh My Skills" [ref=e6] [cursor=pointer]:
+        - img "Oh My Skills" [ref=e7]
+      - button "发现 Agent" [ref=e8] [cursor=pointer]:
+        - generic [ref=e9]: 发现 Agent
+      - button "发现 Skills" [ref=e10] [cursor=pointer]:
+        - generic [ref=e11]: 发现 Skills
+      - button "同步 Skills" [ref=e12] [cursor=pointer]:
+        - generic [ref=e13]: 同步 Skills
+    - button "重新扫描" [ref=e15] [cursor=pointer]:
+      - img [ref=e16]
+  - generic [ref=e22]:
+    - region "扫描状态" [ref=e23]:
+      - generic [ref=e24]:
+        - generic [ref=e25]: 已安装 Agent
+        - strong [ref=e26]: "10"
+      - generic [ref=e27]:
+        - generic [ref=e28]: 已发现 Skills
+        - strong [ref=e29]: "4"
+      - generic [ref=e30]:
+        - generic [ref=e31]: 需检查
+        - strong [ref=e32]: "0"
+      - button "查看已发现 Skills" [ref=e33] [cursor=pointer]:
+        - img [ref=e34]
+        - text: 查看已发现 Skills
+    - tablist "Agent 过滤" [ref=e36]:
+      - tab "全部" [ref=e37] [cursor=pointer]
+      - tab "已安装" [selected] [ref=e38] [cursor=pointer]
+    - generic [ref=e40]: 已发现 Agent 10 个 · Skills 4 个
+    - generic [ref=e41]:
+      - button "AMP CLI 1 Skills 已安装" [ref=e42] [cursor=pointer]:
+        - img [ref=e44]
+        - generic [ref=e45]:
+          - strong [ref=e46]: AMP
+          - generic [ref=e47]: CLI
+        - generic [ref=e48]:
+          - strong [ref=e49]: "1"
+          - generic [ref=e50]: Skills
+        - generic [ref=e51]: 已安装
+        - img [ref=e52]
+      - button "Claude Code CLI 2 Skills 已安装" [ref=e54] [cursor=pointer]:
+        - img [ref=e56]
+        - generic [ref=e57]:
+          - strong [ref=e58]: Claude Code
+          - generic [ref=e59]: CLI
+        - generic [ref=e60]:
+          - strong [ref=e61]: "2"
+          - generic [ref=e62]: Skills
+        - generic [ref=e63]: 已安装
+        - img [ref=e64]
+      - button "Cline 扩展 0 Skills 已安装" [ref=e66] [cursor=pointer]:
+        - img [ref=e68]
+        - generic [ref=e69]:
+          - strong [ref=e70]: Cline
+          - generic [ref=e71]: 扩展
+        - generic [ref=e72]:
+          - strong [ref=e73]: "0"
+          - generic [ref=e74]: Skills
+        - generic [ref=e75]: 已安装
+        - img [ref=e76]
+      - button "Codex CLI · 插件 4 Skills 已安装" [ref=e78] [cursor=pointer]:
+        - img [ref=e80]
+        - generic [ref=e81]:
+          - strong [ref=e82]: Codex
+          - generic [ref=e83]: CLI · 插件
+        - generic [ref=e84]:
+          - strong [ref=e85]: "4"
+          - generic [ref=e86]: Skills
+        - generic [ref=e87]: 已安装
+        - img [ref=e88]
+      - button "Cursor App 1 Skills 已安装" [ref=e90] [cursor=pointer]:
+        - img [ref=e92]
+        - generic [ref=e93]:
+          - strong [ref=e94]: Cursor
+          - generic [ref=e95]: App
+        - generic [ref=e96]:
+          - strong [ref=e97]: "1"
+          - generic [ref=e98]: Skills
+        - generic [ref=e99]: 已安装
+        - img [ref=e100]
+      - button "Gemini CLI CLI 1 Skills 已安装" [ref=e102] [cursor=pointer]:
+        - img [ref=e104]
+        - generic [ref=e105]:
+          - strong [ref=e106]: Gemini CLI
+          - generic [ref=e107]: CLI
+        - generic [ref=e108]:
+          - strong [ref=e109]: "1"
+          - generic [ref=e110]: Skills
+        - generic [ref=e111]: 已安装
+        - img [ref=e112]
+      - button "OpenCode CLI 0 Skills 已安装" [ref=e114] [cursor=pointer]:
+        - img [ref=e116]
+        - generic [ref=e117]:
+          - strong [ref=e118]: OpenCode
+          - generic [ref=e119]: CLI
+        - generic [ref=e120]:
+          - strong [ref=e121]: "0"
+          - generic [ref=e122]: Skills
+        - generic [ref=e123]: 已安装
+        - img [ref=e124]
+      - button "TRAE App 0 Skills 已安装" [ref=e126] [cursor=pointer]:
+        - img [ref=e128]
+        - generic [ref=e129]:
+          - strong [ref=e130]: TRAE
+          - generic [ref=e131]: App
+        - generic [ref=e132]:
+          - strong [ref=e133]: "0"
+          - generic [ref=e134]: Skills
+        - generic [ref=e135]: 已安装
+        - img [ref=e136]
+      - button "Windsurf App 1 Skills 已安装" [ref=e138] [cursor=pointer]:
+        - img [ref=e140]
+        - generic [ref=e141]:
+          - strong [ref=e142]: Windsurf
+          - generic [ref=e143]: App
+        - generic [ref=e144]:
+          - strong [ref=e145]: "1"
+          - generic [ref=e146]: Skills
+        - generic [ref=e147]: 已安装
+        - img [ref=e148]
+      - button "Zed App 0 Skills 已安装" [ref=e150] [cursor=pointer]:
+        - img [ref=e152]
+        - generic [ref=e153]:
+          - strong [ref=e154]: Zed
+          - generic [ref=e155]: App
+        - generic [ref=e156]:
+          - strong [ref=e157]: "0"
+          - generic [ref=e158]: Skills
+        - generic [ref=e159]: 已安装
+        - img [ref=e160]

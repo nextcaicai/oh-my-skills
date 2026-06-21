@@ -559,10 +559,15 @@ export default function App() {
   return (
     <main className="app-shell">
       <header className="top-nav">
-        <div className="nav-logo">
-          <img src={appLogo} alt="Oh My Skills" />
-        </div>
-        <nav className="tab-bar" aria-label="主导航">
+        <div className="tab-bar" aria-label="主导航">
+          <button
+            className="nav-avatar"
+            onClick={() => setSettingsOpen(true)}
+            title="设置"
+            type="button"
+          >
+            <img src={appLogo} alt="Oh My Skills" />
+          </button>
           <TabButton active={view === "agents"} onClick={() => setView("agents")}>
             发现 Agent
           </TabButton>
@@ -572,12 +577,9 @@ export default function App() {
           <TabButton active={view === "sync"} onClick={() => setView("sync")}>
             同步 Skills
           </TabButton>
-        </nav>
+        </div>
 
         <div className="top-actions">
-          <button className="icon-button" onClick={() => setSettingsOpen(true)} title="设置">
-            <Settings size={17} />
-          </button>
           <button className="icon-button" onClick={() => void refreshInventory()} title="重新扫描">
             {busy ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
           </button>
@@ -679,6 +681,7 @@ export default function App() {
         <SettingsSheet
           settings={draftSettings}
           inventory={inventory}
+          agents={installedAgents}
           onChange={setDraftSettings}
           onClose={() => {
             setDraftSettings(settings);
@@ -731,13 +734,10 @@ function AgentsView({
 }) {
   const [agentViewFilter, setAgentViewFilter] = useState<AgentViewFilter>("installed");
   const visibleAgents = agentViewFilter === "installed" ? agents.filter((agent) => agent.installed) : agents;
-  const issueCount = skills.reduce((total, skill) => total + skill.issues.length + (skill.conflict ? 1 : 0), 0);
   const hasScanData = agents.length > 0 || skills.length > 0;
   const summary = agentViewFilter === "all"
     ? `内置 ${agents.length} 个 Agent 的自动检测识别`
     : busy || `已发现 Agent ${installedCount} 个 · Skills ${skills.length} 个`;
-  const primaryLabel = skills.length > 0 ? "查看已发现 Skills" : "重新扫描";
-  const primaryAction = skills.length > 0 ? onGoSkills : onRefresh;
 
   if (!hasScanData) {
     return (
@@ -749,15 +749,6 @@ function AgentsView({
 
   return (
     <div className="agents-page">
-      <section className="agent-status-strip" aria-label="扫描状态">
-        <InfoBlock label="已安装 Agent" value={`${installedCount}`} />
-        <InfoBlock label="已发现 Skills" value={`${skills.length}`} />
-        <InfoBlock label="需检查" value={`${issueCount}`} />
-        <button className="primary-button" onClick={primaryAction} type="button">
-          {busy ? <Loader2 className="spin" size={16} /> : <ArrowRight size={16} />}
-          {busy || primaryLabel}
-        </button>
-      </section>
       <div className="agent-filter-tabs" role="tablist" aria-label="Agent 过滤">
         <button
           className={agentViewFilter === "all" ? "active" : ""}
@@ -1804,6 +1795,7 @@ function planSummarySentence(plan: SyncPlan, summary: ReturnType<typeof syncPlan
 function SettingsSheet({
   settings,
   inventory,
+  agents = [],
   onChange,
   onClose,
   onSave,
@@ -1811,78 +1803,132 @@ function SettingsSheet({
 }: {
   settings: AppSettings;
   inventory: InventorySnapshot | null;
+  agents?: AgentRecord[];
   onChange: (settings: AppSettings) => void;
   onClose: () => void;
   onSave: () => void;
   onAddProjectFolder: () => void;
 }) {
+  const [settingsTab, setSettingsTab] = useState<"general" | "agents">("general");
+
+  const installedCount = agents.length;
+
   return (
     <div className="sheet-backdrop">
-      <aside className="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <div className="pane-title">
-          <div>
-            <h1 id="settings-title">工作区设置</h1>
-            <p>配置中心库、项目工作区和路径显示方式。</p>
+      <aside className="settings-sheet" role="dialog" aria-modal="true">
+        <div className="settings-header">
+          <div className="settings-tabs" role="tablist" aria-label="设置分类">
+            <button
+              role="tab"
+              aria-selected={settingsTab === "general"}
+              className={settingsTab === "general" ? "active" : ""}
+              onClick={() => setSettingsTab("general")}
+              type="button"
+            >
+              通用
+            </button>
+            <button
+              role="tab"
+              aria-selected={settingsTab === "agents"}
+              className={settingsTab === "agents" ? "active" : ""}
+              onClick={() => setSettingsTab("agents")}
+              type="button"
+            >
+              Agent
+            </button>
           </div>
-          <button className="icon-button" onClick={onClose} title="关闭">
+          <button className="icon-button" onClick={onClose} title="关闭" type="button">
             <XCircle size={17} />
           </button>
         </div>
 
         <div className="settings-content">
-          <section className="settings-section">
-            <label className="field">
-              <span>中心库</span>
-              <input value={settings.libraryPath} onChange={(event) => onChange({ ...settings, libraryPath: event.target.value })} />
-              <small>中心库用于保存规范 Skill 副本；同步时会从这里链接或复制到目标 Agent。</small>
-            </label>
-            <label className="switch-row">
-              <input
-                type="checkbox"
-                checked={settings.showRawPaths}
-                onChange={(event) => onChange({ ...settings, showRawPaths: event.target.checked })}
-              />
-              <span>显示原始文件路径</span>
-            </label>
-          </section>
+          {settingsTab === "general" && (
+            <>
+              <section className="settings-section">
+                <label className="field">
+                  <span>中心库</span>
+                  <input value={settings.libraryPath} onChange={(event) => onChange({ ...settings, libraryPath: event.target.value })} />
+                  <small>中心库用于保存规范 Skill 副本；同步时会从这里链接或复制到目标 Agent。</small>
+                </label>
+                <label className="switch-row">
+                  <input
+                    type="checkbox"
+                    checked={settings.showRawPaths}
+                    onChange={(event) => onChange({ ...settings, showRawPaths: event.target.checked })}
+                  />
+                  <span>显示原始文件路径</span>
+                </label>
+              </section>
 
-          <section className="settings-section">
-            <div className="section-heading">
-              <h2>项目目录</h2>
-              <button className="secondary-button" onClick={onAddProjectFolder}>
-                <FolderPlus size={16} />
-                添加
-              </button>
-            </div>
-            <div className="settings-path-list">
-              {settings.projectFolders.map((folder) => (
-                <div className="path-row" key={folder}>
-                  <code title={folder}>{folder}</code>
-                  <button
-                    className="icon-button subtle"
-                    onClick={() => onChange({ ...settings, projectFolders: settings.projectFolders.filter((item) => item !== folder) })}
-                    title="移除项目目录"
-                  >
-                    <XCircle size={16} />
+              <section className="settings-section">
+                <div className="section-heading">
+                  <h2>项目目录</h2>
+                  <button className="secondary-button" onClick={onAddProjectFolder}>
+                    <FolderPlus size={16} />
+                    添加
                   </button>
                 </div>
-              ))}
-              {settings.projectFolders.length === 0 && <p className="muted">还没有添加项目目录。</p>}
-            </div>
-          </section>
+                <div className="settings-path-list">
+                  {settings.projectFolders.map((folder) => (
+                    <div className="path-row" key={folder}>
+                      <code title={folder}>{folder}</code>
+                      <button
+                        className="icon-button subtle"
+                        onClick={() => onChange({ ...settings, projectFolders: settings.projectFolders.filter((item) => item !== folder) })}
+                        title="移除项目目录"
+                      >
+                        <XCircle size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  {settings.projectFolders.length === 0 && <p className="muted">还没有添加项目目录。</p>}
+                </div>
+              </section>
 
-          <section className="settings-section">
-            <h2>应用数据</h2>
-            <code className="path-code" title={inventory?.appDataPath || undefined}>{inventory?.appDataPath || "尚未扫描"}</code>
-          </section>
+              <section className="settings-section">
+                <h2>应用数据</h2>
+                <code className="path-code" title={inventory?.appDataPath || undefined}>{inventory?.appDataPath || "尚未扫描"}</code>
+              </section>
+            </>
+          )}
+
+          {settingsTab === "agents" && (
+            <div className="settings-agents-pane">
+              {installedCount > 0 ? (
+                <div className="settings-agent-list">
+                  {agents.map((agent) => (
+                    <div className="settings-agent-row" key={agent.id}>
+                      <AgentIcon agent={agent} />
+                      <strong>{agent.label}</strong>
+                      <StatusPill status={agent.status} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="settings-agent-empty">
+                  暂未发现本地有可用Agent
+                </div>
+              )}
+              <p className="settings-agent-hint">
+                已发现 {installedCount} 个已安装 Agent，可在「发现 Agent」页面查看详情。
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="sheet-actions">
-          <button className="secondary-button" onClick={onClose}>取消</button>
-          <button className="primary-button" onClick={onSave}>
-            <Check size={16} />
-            保存
-          </button>
+          {settingsTab === "general" ? (
+            <>
+              <button className="secondary-button" onClick={onClose} type="button">取消</button>
+              <button className="primary-button" onClick={onSave} type="button">
+                <Check size={16} />
+                保存
+              </button>
+            </>
+          ) : (
+            <button className="primary-button" onClick={onClose} type="button">关闭</button>
+          )}
         </div>
       </aside>
     </div>

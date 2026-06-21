@@ -83,19 +83,31 @@ p {
   padding: 16px 24px 10px;
 }
 
-.nav-logo {
-  position: absolute;
-  left: 24px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
+.nav-avatar {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(24, 26, 29, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  margin-right: 4px;
+  padding: 0;
+  overflow: hidden;
 }
 
-.nav-logo img {
-  height: 28px;
-  width: auto;
+.nav-avatar img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
   display: block;
+}
+
+.nav-avatar:hover {
+  transform: scale(1.03);
 }
 
 .tab-bar,
@@ -111,8 +123,10 @@ p {
 .tab-bar {
   grid-column: 2;
   justify-self: center;
-  gap: 3px;
-  padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 4px 6px;
   border: 1px solid rgba(24, 26, 29, 0.12);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.68);
@@ -384,20 +398,6 @@ p {
     opacity: 0;
     transform: scale(0.92);
   }
-}
-
-.agent-status-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 160px)) auto;
-  align-items: center;
-  gap: 8px;
-  width: max-content;
-  max-width: 100%;
-  padding: 8px;
-  border: 1px solid rgba(24, 26, 29, 0.12);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.68);
-  box-shadow: 0 16px 48px rgba(22, 24, 26, 0.08);
 }
 
 .agent-filter-tabs {
@@ -2094,6 +2094,83 @@ p {
   min-width: 0;
   padding: 10px 11px;
   background: rgba(24, 26, 29, 0.06);
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 12px 18px;
+  border-bottom: 1px solid rgba(24, 26, 29, 0.10);
+  background: rgba(250, 251, 252, 0.6);
+}
+
+.settings-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(24, 26, 29, 0.06);
+}
+
+.settings-tabs button {
+  padding: 0 13px;
+  min-height: 28px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(23, 25, 28, 0.65);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.settings-tabs button.active {
+  background: #2f3338;
+  color: #f9fafb;
+}
+
+.settings-agents-pane {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-agent-list {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(24, 26, 29, 0.08);
+  font-size: 13px;
+}
+
+.settings-agent-row strong {
+  flex: 1;
+  font-weight: 700;
+}
+
+.settings-agent-empty {
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--app-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-agent-hint {
+  margin: 0;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--app-muted);
+  text-align: center;
 }
 
 .sheet-actions {
