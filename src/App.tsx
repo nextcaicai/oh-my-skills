@@ -53,6 +53,8 @@ const defaultSettings: AppSettings = {
   language: "zh-CN"
 };
 
+const appLogo = new URL("../oms_logo.svg", import.meta.url).href;
+
 export default function App() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [draftSettings, setDraftSettings] = useState<AppSettings>(defaultSettings);
@@ -557,6 +559,9 @@ export default function App() {
   return (
     <main className="app-shell">
       <header className="top-nav">
+        <div className="nav-logo">
+          <img src={appLogo} alt="Oh My Skills" />
+        </div>
         <nav className="tab-bar" aria-label="主导航">
           <TabButton active={view === "agents"} onClick={() => setView("agents")}>
             发现 Agent
