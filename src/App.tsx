@@ -53,18 +53,6 @@ const defaultSettings: AppSettings = {
   language: "zh-CN"
 };
 
-const startupT0 =
-  typeof window !== "undefined"
-    ? (window as typeof window & { __OMS_STARTUP_T0?: number }).__OMS_STARTUP_T0 ?? performance.now()
-    : 0;
-
-function logStartup(phase: string, details: Record<string, unknown> = {}) {
-  console.info(`[OMS-startup] ${phase}`, {
-    elapsedMs: Math.round(performance.now() - startupT0),
-    ...details
-  });
-}
-
 export default function App() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [draftSettings, setDraftSettings] = useState<AppSettings>(defaultSettings);
@@ -164,9 +152,7 @@ export default function App() {
   );
 
   async function boot() {
-    const startedAt = performance.now();
-    logStartup("frontend.boot.start");
-    setBusy("读取设置");
+    setBusy("读取上次扫描");
     setError(null);
     if (!isTauriRuntime()) {
       setSettings(defaultSettings);
@@ -175,49 +161,36 @@ export default function App() {
       setInventory(demoInventory);
       setSelectedSkillId(null);
       setBusy("");
-      logStartup("frontend.boot.demo-ready", {
-        durationMs: Math.round(performance.now() - startedAt)
-      });
       return;
     }
     try {
-      const settingsStartedAt = performance.now();
-      logStartup("frontend.boot.settings-and-lock.start");
-      const [loaded, locks] = await Promise.all([
+      const [loaded, locks, cachedInventory] = await Promise.all([
         invoke<AppSettings>("get_settings"),
-        readSkillLocks()
+        readSkillLocks(),
+        readInventoryCache()
       ]);
-      logStartup("frontend.boot.settings-and-lock.end", {
-        durationMs: Math.round(performance.now() - settingsStartedAt),
-        lockEntries: Object.keys(locks).length,
-        projectFolders: loaded.projectFolders.length,
-        customRoots: loaded.customRoots.length
-      });
       setSettings(loaded);
       setDraftSettings(loaded);
       setSkillLocks(locks);
-      setBusy("");
-      logStartup("frontend.boot.first-usable", {
-        durationMs: Math.round(performance.now() - startedAt)
+      setInventory(cachedInventory);
+      setSelectedSkillId((current) => {
+        if (current && cachedInventory?.skills.some((skill) => skill.id === current)) return current;
+        return null;
       });
-      window.setTimeout(() => {
-        logStartup("frontend.boot.background-scan.scheduled");
-        void refreshInventory({ background: true });
-      }, 0);
+      setSelectedSkillIds((current) => {
+        if (!cachedInventory) return new Set();
+        const valid = new Set(cachedInventory.skills.map((skill) => skill.id));
+        return new Set([...current].filter((id) => valid.has(id)));
+      });
+      setBusy("");
     } catch (reason) {
       setError(String(reason));
       setBusy("");
-      logStartup("frontend.boot.error", {
-        durationMs: Math.round(performance.now() - startedAt),
-        error: String(reason)
-      });
     }
   }
 
-  async function refreshInventory(options: { background?: boolean } = {}) {
-    const startedAt = performance.now();
-    logStartup("frontend.scan.start", { background: Boolean(options.background) });
-    setBusy(options.background ? "后台扫描本机 Agent 与 Skills" : "扫描本机 Agent 与 Skills");
+  async function refreshInventory() {
+    setBusy("扫描本机 Agent 与 Skills");
     setError(null);
     try {
       const [locks, next] = await Promise.all([
@@ -226,14 +199,6 @@ export default function App() {
           options: { includeOrphaned: false }
         })
       ]);
-      logStartup("frontend.scan.commands-resolved", {
-        durationMs: Math.round(performance.now() - startedAt),
-        lockEntries: Object.keys(locks).length,
-        agents: next.agents.length,
-        roots: next.roots.length,
-        skills: next.skills.length,
-        issues: next.issues.length
-      });
       setSkillLocks(locks);
       setInventory(next);
       setSkillUpdateChecks({});
@@ -247,16 +212,8 @@ export default function App() {
       });
     } catch (reason) {
       setError(String(reason));
-      logStartup("frontend.scan.error", {
-        durationMs: Math.round(performance.now() - startedAt),
-        error: String(reason)
-      });
     } finally {
       setBusy("");
-      logStartup("frontend.scan.end", {
-        durationMs: Math.round(performance.now() - startedAt),
-        background: Boolean(options.background)
-      });
     }
   }
 
@@ -269,6 +226,13 @@ export default function App() {
       return demoSkillLocks;
     }
     return invoke<Record<string, SkillLockEntry>>("read_skill_lock");
+  }
+
+  async function readInventoryCache() {
+    if (!isTauriRuntime()) {
+      return demoInventory;
+    }
+    return invoke<InventorySnapshot | null>("read_inventory_cache");
   }
 
   async function previewSkillsSync(skills = queuedSkills, targets: AgentTarget[] = []) {
@@ -763,11 +727,20 @@ function AgentsView({
   const [agentViewFilter, setAgentViewFilter] = useState<AgentViewFilter>("installed");
   const visibleAgents = agentViewFilter === "installed" ? agents.filter((agent) => agent.installed) : agents;
   const issueCount = skills.reduce((total, skill) => total + skill.issues.length + (skill.conflict ? 1 : 0), 0);
+  const hasScanData = agents.length > 0 || skills.length > 0;
   const summary = agentViewFilter === "all"
     ? `内置 ${agents.length} 个 Agent 的自动检测识别`
     : busy || `已发现 Agent ${installedCount} 个 · Skills ${skills.length} 个`;
   const primaryLabel = skills.length > 0 ? "查看已发现 Skills" : "重新扫描";
   const primaryAction = skills.length > 0 ? onGoSkills : onRefresh;
+
+  if (!hasScanData) {
+    return (
+      <div className="agents-page empty-state-page">
+        <AgentDiscoveryEmptyState busy={busy} onRefresh={onRefresh} />
+      </div>
+    );
+  }
 
   return (
     <div className="agents-page">
@@ -838,6 +811,47 @@ function AgentsView({
         )}
       </section>
     </div>
+  );
+}
+
+const emptyStateAgentIds = [
+  "codex",
+  "claude-code",
+  "cursor",
+  "windsurf",
+  "gemini-cli",
+  "qwen_code",
+  "opencode"
+];
+
+function AgentDiscoveryEmptyState({ busy, onRefresh }: { busy: string; onRefresh: () => void }) {
+  return (
+    <section className="agent-empty-state" aria-label="发现 Agent 空状态">
+      <div className="agent-empty-visual" aria-hidden="true">
+        {emptyStateAgentIds.map((agentId, index) => {
+          const icon = agentIconAsset(agentId);
+          if (!icon) return null;
+          const style = {
+            "--slot-index": index,
+            "--agent-icon-size": `${icon.size ?? 25}px`
+          } as CSSProperties;
+
+          return (
+            <span className={`agent-empty-logo logo-${index + 1}`} key={agentId} style={style}>
+              <img alt="" src={icon.src} />
+            </span>
+          );
+        })}
+      </div>
+      <div className="agent-empty-copy">
+        <strong>还没有扫描本地 Agent</strong>
+        <span>先扫描这台机器，看看哪些 Agent 已经可用。</span>
+      </div>
+      <button className="agent-empty-button" disabled={Boolean(busy)} onClick={onRefresh} type="button">
+        {busy ? <Loader2 className="spin" size={16} /> : <Search size={16} />}
+        <span>扫描本地 Agent</span>
+      </button>
+    </section>
   );
 }
 

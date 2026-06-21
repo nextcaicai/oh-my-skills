@@ -10,61 +10,23 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 use tauri::AppHandle;
 
 pub fn scan(app: &AppHandle, options: ScanOptions) -> Result<InventorySnapshot, String> {
-    let started_at = Instant::now();
-    println!(
-        "[OMS-startup] scanner.scan.start includeOrphaned={}",
-        options.include_orphaned
-    );
-    let settings_started_at = Instant::now();
     let settings = load_settings(app)?;
     let app_data = app_data_dir(app)?;
     let library_path = PathBuf::from(&settings.library_path);
-    println!(
-        "[OMS-startup] scanner.scan.settings durationMs={}",
-        settings_started_at.elapsed().as_millis()
-    );
-    let roots_started_at = Instant::now();
     let roots = resolve_roots(&settings, options.include_orphaned);
-    println!(
-        "[OMS-startup] scanner.scan.resolve-roots durationMs={} roots={}",
-        roots_started_at.elapsed().as_millis(),
-        roots.len()
-    );
-    let agents_started_at = Instant::now();
     let agents = detect_agents(&settings, options.include_orphaned);
-    println!(
-        "[OMS-startup] scanner.scan.detect-agents durationMs={} agents={}",
-        agents_started_at.elapsed().as_millis(),
-        agents.len()
-    );
 
     let mut all_issues = Vec::new();
-    let canonical_started_at = Instant::now();
     let canonical = scan_canonical_library(&library_path, &mut all_issues)?;
-    println!(
-        "[OMS-startup] scanner.scan.canonical durationMs={} skills={}",
-        canonical_started_at.elapsed().as_millis(),
-        canonical.len()
-    );
     let mut grouped: BTreeMap<SkillGroupKey, Vec<SkillInstallation>> = BTreeMap::new();
 
     for root in &roots {
-        let root_started_at = Instant::now();
         scan_root(root, &library_path, &mut grouped, &mut all_issues)?;
-        println!(
-            "[OMS-startup] scanner.scan.root durationMs={} agent={} scope={} path={}",
-            root_started_at.elapsed().as_millis(),
-            root.agent_id,
-            root.scope,
-            root.path
-        );
     }
 
-    let grouping_started_at = Instant::now();
     let mut keys: BTreeSet<SkillGroupKey> = canonical.keys().cloned().collect();
     keys.extend(grouped.keys().cloned());
     let duplicated_slugs = duplicated_slugs(&keys);
@@ -153,16 +115,6 @@ pub fn scan(app: &AppHandle, options: ScanOptions) -> Result<InventorySnapshot, 
         });
     }
 
-    println!(
-        "[OMS-startup] scanner.scan.grouping durationMs={} skills={}",
-        grouping_started_at.elapsed().as_millis(),
-        skills.len()
-    );
-    println!(
-        "[OMS-startup] scanner.scan.end durationMs={}",
-        started_at.elapsed().as_millis()
-    );
-
     Ok(InventorySnapshot {
         agents,
         roots,
@@ -171,6 +123,31 @@ pub fn scan(app: &AppHandle, options: ScanOptions) -> Result<InventorySnapshot, 
         scanned_at: Utc::now().to_rfc3339(),
         app_data_path: path_to_string(&app_data),
         library_path: path_to_string(&library_path),
+    })
+}
+
+pub fn inventory_cache_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join("inventory-cache.json"))
+}
+
+pub fn read_inventory_cache(app: &AppHandle) -> Result<Option<InventorySnapshot>, String> {
+    let path = inventory_cache_path(app)?;
+    let Ok(text) = fs::read_to_string(&path) else {
+        return Ok(None);
+    };
+    Ok(serde_json::from_str::<InventorySnapshot>(&text).ok())
+}
+
+pub fn write_inventory_cache(app: &AppHandle, snapshot: &InventorySnapshot) -> Result<(), String> {
+    let path = inventory_cache_path(app)?;
+    ensure_dir(path.parent().ok_or("Inventory cache path has no parent")?)?;
+    let text = serde_json::to_string_pretty(snapshot)
+        .map_err(|error| format!("Unable to serialize inventory cache: {error}"))?;
+    fs::write(&path, text).map_err(|error| {
+        format!(
+            "Unable to write inventory cache {}: {error}",
+            path_to_string(&path)
+        )
     })
 }
 

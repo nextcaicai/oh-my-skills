@@ -69,8 +69,8 @@ p {
   flex-direction: column;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(246, 247, 248, 0.12)),
-    rgba(235, 237, 238, 0.14);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(246, 247, 248, 0.26)),
+    rgba(235, 237, 238, 0.28);
   color: var(--app-text);
 }
 
@@ -219,6 +219,155 @@ p {
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 10px;
+}
+
+.agents-page.empty-state-page {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.agent-empty-state {
+  display: flex;
+  min-height: 100%;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 0 0 8vh;
+  text-align: center;
+}
+
+.agent-empty-visual {
+  position: relative;
+  width: min(560px, 58vw);
+  height: 250px;
+  margin-bottom: 24px;
+  overflow: hidden;
+  background-image:
+    linear-gradient(rgba(24, 26, 29, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(24, 26, 29, 0.09) 1px, transparent 1px);
+  background-position: center;
+  background-size: 72px 72px;
+  mask-image:
+    linear-gradient(90deg, transparent 0, #000 17%, #000 83%, transparent 100%),
+    linear-gradient(180deg, transparent 0, #000 12%, #000 82%, transparent 100%);
+  mask-composite: intersect;
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0, #000 17%, #000 83%, transparent 100%),
+    linear-gradient(180deg, transparent 0, #000 12%, #000 82%, transparent 100%);
+  -webkit-mask-composite: source-in;
+}
+
+.agent-empty-logo {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  opacity: 0;
+  transform: scale(0.84);
+  animation: empty-logo-cycle 9.8s ease-in-out infinite;
+  animation-delay: calc(var(--slot-index) * -1.4s);
+}
+
+.agent-empty-logo img {
+  width: var(--agent-icon-size, 25px);
+  height: var(--agent-icon-size, 25px);
+  max-width: 30px;
+  max-height: 30px;
+  object-fit: contain;
+}
+
+.agent-empty-logo.logo-1 {
+  left: 24%;
+  top: 55%;
+}
+
+.agent-empty-logo.logo-2 {
+  left: 36%;
+  top: 28%;
+}
+
+.agent-empty-logo.logo-3 {
+  left: 52%;
+  top: 51%;
+}
+
+.agent-empty-logo.logo-4 {
+  left: 66%;
+  top: 25%;
+}
+
+.agent-empty-logo.logo-5 {
+  left: 72%;
+  top: 60%;
+}
+
+.agent-empty-logo.logo-6 {
+  left: 18%;
+  top: 20%;
+}
+
+.agent-empty-logo.logo-7 {
+  left: 45%;
+  top: 68%;
+}
+
+.agent-empty-copy {
+  display: grid;
+  gap: 9px;
+  margin-bottom: 18px;
+}
+
+.agent-empty-copy strong {
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.agent-empty-copy span {
+  color: rgba(23, 25, 28, 0.50);
+  font-size: 16px;
+}
+
+.agent-empty-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 17px;
+  border-radius: 8px;
+  background: #2f3338;
+  color: #f9fafb;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 820;
+  box-shadow: 0 14px 34px rgba(22, 24, 26, 0.18);
+}
+
+.agent-empty-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+@keyframes empty-logo-cycle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.84);
+  }
+
+  12%,
+  42% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  58% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
 }
 
 .agent-status-strip {
