@@ -8,6 +8,14 @@
 
 All filesystem mutations go through a strict **Preview → Confirm → Apply** flow. The actual file operations are handled by a Rust backend for safety and reliability.
 
+<p align="center">
+  <img src="screenshots/main-window.png" width="720" alt="Main window - Skills inventory">
+</p>
+
+<p align="center">
+  <img src="screenshots/sync-preview.png" width="720" alt="Sync preview and execution">
+</p>
+
 ---
 
 ## Features
@@ -148,6 +156,28 @@ Roadmap ideas:
 - GitHub-based skill sources
 - Multi-platform CI builds + auto-update
 - More agent adapters and project workspace UX improvements
+
+## Screenshots
+
+<p align="center">
+  <img src="screenshots/main-window.png" width="700" alt="Main interface">
+</p>
+
+**Skills Inventory**: See all discovered skills, which agents they cover, and their status.
+
+<p align="center">
+  <img src="screenshots/sync-preview.png" width="700" alt="Sync preview">
+</p>
+
+**Sync Preview**: Select skills and generate a detailed plan (create folders, copy, symlink, backup, etc.) before applying any changes.
+
+<p align="center">
+  <img src="screenshots/agent-list.png" width="700" alt="Agent detection">
+</p>
+
+**Agent Detection**: Automatically scans installed AI tools and their skill locations on your machine.
+
+> Replace the images in the `screenshots/` folder with real ones (recommended PNG width 700-900px).
 
 ## Contributing
 
