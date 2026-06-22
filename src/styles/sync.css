@@ -714,8 +714,7 @@
   justify-content: space-between;
   gap: 12px;
   margin-top: 14px;
-  padding: 0 12px;
-  min-height: 62px;
+  padding: 10px 12px;
   border-top: 1px solid rgba(24, 26, 29, 0.08);
 }
 
@@ -726,6 +725,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 58%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
 }
 
 .action-preview .preview-label {
