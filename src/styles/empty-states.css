@@ -187,7 +187,8 @@
   justify-content: center;
 }
 
-.skill-list > .agent-empty-state .agent-empty-visual {
+.skill-list > .agent-empty-state .agent-empty-visual,
+.skill-list > .agent-empty-state .project-empty-visual {
   width: min(480px, 72vw);
   height: 220px;
   margin-bottom: 20px;

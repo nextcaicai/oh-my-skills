@@ -157,7 +157,7 @@ export function SkillsView({
         : "尚未关联项目工作区"
       : "还没有全局 Skills";
   const emptyBody = isFiltered
-    ? "换个关键词试试，或切换 Agent、清空搜索条件。"
+    ? "换个关键词试试"
     : isProjectWorkspace
       ? hasProjectWorkspaces
         ? "可以从中心库同步到当前项目，或创建某个 Agent 的项目 skills 目录。"
@@ -473,7 +473,7 @@ function SkillsListEmptyState({
 }) {
   return (
     <section className="agent-empty-state" aria-label="Skills 列表空状态">
-      {workspace === "project" ? <ProjectEmptyVisual /> : <AgentEmptyVisual />}
+      {isFiltered || workspace === "project" ? <ProjectEmptyVisual /> : <AgentEmptyVisual />}
       <div className="agent-empty-copy">
         <strong>{title}</strong>
         <span>{body}</span>
