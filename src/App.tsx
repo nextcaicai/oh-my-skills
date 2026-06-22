@@ -1879,8 +1879,43 @@ function SyncView({
 
             <div className={`confirm-summary ${blocked ? "blocked" : ""}`}>
               {blocked ? <AlertTriangle size={22} /> : <Check size={22} />}
-              <strong>{confirmationText}</strong>
+              <div className="summary-body">
+                <strong>{confirmationText}</strong>
+                {!plan && selectedTargets.length > 0 && selectedSkillCount > 0 && (
+                  <span className="summary-sub">点击下方按钮生成详细预览</span>
+                )}
+              </div>
             </div>
+
+            {selectedTargets.length > 0 && (
+              <div className="destinations-preview">
+                <div className="dest-label">将同步到这些位置</div>
+                <div className="dest-list">
+                  {selectedTargets.map((agent) => {
+                    const destPath = targetPathPreview(agent, targetScope);
+                    const isSymlink = syncMode === "quick" && quickMethod === "symlink";
+                    return (
+                      <div className="dest-item" key={agent.id}>
+                        <AgentIcon agent={agent} />
+                        <div className="dest-text">
+                          <span className="dest-agent">{agent.label}</span>
+                          <span className="dest-scope">{targetScope === "project" ? "项目" : "全局"}</span>
+                          {destPath && (
+                            <code className="dest-path" title={destPath}>{compactPath(destPath)}</code>
+                          )}
+                        </div>
+                        <span className="dest-action" title={isSymlink ? "创建软链接" : syncMode === "managed" ? "软链接分发" : "完整复制"}>
+                          {isSymlink ? "软链接" : syncMode === "managed" ? "软链接" : "复制"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="dest-hint">
+                  每个 Skill 会在以上目录下创建对应子文件夹{quickMethod === "symlink" && syncMode === "quick" ? "（软链接指向源文件）" : "（完整副本）"}。
+                </div>
+              </div>
+            )}
 
             {summary && (
               <div className="sync-summary-grid" aria-label="同步摘要">
@@ -1894,9 +1929,14 @@ function SyncView({
             )}
 
             <div className="confirm-note">
-              <strong>说明</strong>
-              <span>{syncMode === "managed" ? "先复制到中心库，再用软链接分发到目标 Agent。" : "快速同步不使用中心库，可选择复制副本或创建软链接。"}</span>
-              <span>不会直接覆盖不同内容；冲突会在预览中阻塞。</span>
+              <span>
+                {syncMode === "managed"
+                  ? "先放进中心库统一管理，再通过软链接分发。"
+                  : quickMethod === "copy"
+                  ? "直接复制完整文件夹到目标 Agent。"
+                  : "在目标 Agent 里创建指向源 Skill 的软链接。"}
+              </span>
+              <span>有冲突的内容会在预览中被拦住，不会直接覆盖。</span>
             </div>
 
             {plan && plan.preconditions.length > 0 && (
@@ -1975,22 +2015,24 @@ function draftPlanSentence(mode: SyncMode, method: QuickMigrationMethod, skillCo
   if (skillCount === 0) return "请先选择至少 1 个 Skill。";
   if (targetCount === 0) return "请选择至少 1 个目标 Agent。";
   if (mode === "managed") {
-    return `将导入中心库 ${skillCount} 个 Skill，并创建 ${skillCount * targetCount} 个软链接。`;
+    return `导入中心库 ${skillCount} 个 Skill，并为 ${targetCount} 个 Agent 创建软链接。`;
   }
   return method === "copy"
-    ? `将复制 ${skillCount} 个 Skill 到 ${targetCount} 个 Agent。`
-    : `将在 ${targetCount} 个 Agent 中为 ${skillCount} 个 Skill 创建软链接。`;
+    ? `复制 ${skillCount} 个 Skill 到 ${targetCount} 个 Agent 的技能目录`
+    : `为 ${skillCount} 个 Skill 在 ${targetCount} 个 Agent 中创建软链接`;
 }
 
 function planSummarySentence(plan: SyncPlan, summary: ReturnType<typeof syncPlanSummary> | null) {
   if (!summary) return "同步预览已生成。";
   if (plan.blockedConflicts.length > 0) return `发现 ${plan.blockedConflicts.length} 个阻塞，请先处理后再执行。`;
   const parts = [];
-  if (summary.create > 0) parts.push(`创建 ${summary.create} 项`);
-  if (summary.symlink > 0) parts.push(`创建 ${summary.symlink} 个软链接`);
+  if (summary.create > 0) parts.push(`新增 ${summary.create} 项`);
+  if (summary.symlink > 0) parts.push(`${summary.symlink} 个软链接`);
   if (summary.backup > 0) parts.push(`备份 ${summary.backup} 项`);
+  if (summary.overwrite > 0) parts.push(`覆盖 ${summary.overwrite} 项`);
   if (summary.noop > 0) parts.push(`跳过 ${summary.noop} 项`);
-  return `${parts.join("，") || "无需变更"}，无阻塞。`;
+  const action = parts.join("，") || "无需变更";
+  return `${action}，可安全执行。`;
 }
 
 function SettingsSheet({

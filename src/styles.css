@@ -2029,11 +2029,20 @@ p {
 }
 
 .sync-confirm-pane .sync-summary-grid {
-  display: none;
+  /* visible now - shows quick impact summary */
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin: 6px 0 2px;
+}
+
+.sync-confirm-pane .info-block {
+  padding: 6px 8px;
+  background: rgba(24, 26, 29, 0.04);
 }
 
 .sync-confirm-pane .precondition-note {
-  display: none;
+  /* show useful preconditions now */
 }
 
 .sync-section {
@@ -2221,21 +2230,33 @@ p {
 
 .confirm-summary {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  min-height: 56px;
-  padding: 0 16px;
+  min-height: 52px;
+  padding: 8px 16px;
   border: 1px solid rgba(35, 139, 105, 0.18);
   border-radius: 10px;
   background: rgba(35, 139, 105, 0.07);
   color: #116149;
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 .confirm-summary strong {
   flex: 1;
+}
+
+.confirm-summary .summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+}
+
+.confirm-summary .summary-sub {
+  font-size: 11px;
+  opacity: 0.7;
 }
 
 .confirm-summary.blocked {
@@ -2251,14 +2272,13 @@ p {
 
 .confirm-note {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 0 4px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 4px 2px;
   background: transparent;
   color: rgba(23, 25, 28, 0.62);
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.45;
 }
 
 .confirm-note strong {
@@ -2267,6 +2287,94 @@ p {
 
 .confirm-note span {
   color: rgba(23, 25, 28, 0.50);
+}
+
+/* Destination preview in sync confirm pane - makes "what happens where" obvious */
+.destinations-preview {
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  background: rgba(24, 26, 29, 0.035);
+  border-radius: 8px;
+  border: 1px solid rgba(24, 26, 29, 0.06);
+}
+
+.dest-label {
+  font-size: 11px;
+  color: rgba(23, 25, 28, 0.55);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.dest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dest-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  font-size: 12px;
+}
+
+.dest-item .agent-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+.dest-item .agent-icon img {
+  width: 18px;
+  height: 18px;
+}
+
+.dest-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.dest-agent {
+  font-weight: 500;
+  color: var(--app-text);
+}
+
+.dest-scope {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(24, 26, 29, 0.06);
+  color: rgba(23, 25, 28, 0.6);
+}
+
+.dest-path {
+  font-size: 11px;
+  color: rgba(23, 25, 28, 0.45);
+  background: transparent;
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+.dest-action {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(35, 139, 105, 0.12);
+  color: #116149;
+  white-space: nowrap;
+}
+
+.dest-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: rgba(23, 25, 28, 0.45);
+  line-height: 1.4;
 }
 
 .sync-action-bar {
