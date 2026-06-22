@@ -43,7 +43,7 @@ export const demoInventory: InventorySnapshot = {
   issues: [],
   scannedAt: new Date().toISOString(),
   appDataPath: "/Users/example/Library/Application Support/oh-my-skills",
-  libraryPath: "/Users/example/.oh-my-skills/library"
+  libraryPath: "/Users/example/.oh-my-skills/skills"
 };
 
 export const demoSkillLocks: Record<string, SkillLockEntry> = {
@@ -101,7 +101,7 @@ function demoSkill(id: string, name: string, description: string, agentIds: stri
     displayName: name,
     description,
     canonicalStatus: "imported",
-    canonicalPath: `/Users/example/.oh-my-skills/library/${id}`,
+    canonicalPath: `/Users/example/.oh-my-skills/skills/${id}`,
     canonicalHash: "demo",
     installations,
     missingAgents: demoAgents.filter((agent) => agent.installed && !agentIds.includes(agent.id)).map((agent) => agent.id),
@@ -126,7 +126,7 @@ function demoPlan(skill: SkillRecord, targets: AgentTarget[], kind: "adopt" | "s
             opType: "copy-to-library",
             status: "planned",
             sourcePath: firstValidInstallation(skill)?.entryPath,
-            targetPath: `/Users/example/.oh-my-skills/library/${skill.slug}`,
+            targetPath: `/Users/example/.oh-my-skills/skills/${skill.slug}`,
             message: `导入 ${skill.displayName} 到中心库`,
             skillId: skill.id
           }]
@@ -135,7 +135,7 @@ function demoPlan(skill: SkillRecord, targets: AgentTarget[], kind: "adopt" | "s
         id: `demo-link-${index}`,
         opType: "create-symlink",
         status: "planned",
-        sourcePath: `/Users/example/.oh-my-skills/library/${skill.slug}`,
+        sourcePath: `/Users/example/.oh-my-skills/skills/${skill.slug}`,
         targetPath: `/Users/example/.${target.agentId}/skills/${skill.slug}`,
         message: `同步 ${skill.displayName} 到 ${target.agentId} ${target.scope ?? "global"}`,
         agentId: target.agentId,

@@ -15,7 +15,12 @@ pub fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 pub fn default_settings(app: &AppHandle) -> Result<Settings, String> {
-    let library_path = app_data_dir(app)?.join("library").join("skills");
+    let library_path = app
+        .path()
+        .home_dir()
+        .map_err(|error| format!("Unable to resolve home directory: {error}"))?
+        .join(".oh-my-skills")
+        .join("skills");
     Ok(Settings {
         library_path: path_to_string(&library_path),
         project_folders: Vec::new(),
