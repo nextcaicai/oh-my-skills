@@ -659,7 +659,7 @@
 
 .skill-table-head {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 180px 75px 34px;
+  grid-template-columns: 34px minmax(260px, 1fr) 180px 75px;
   gap: 10px;
   align-items: center;
   margin-right: 18px;
@@ -671,7 +671,7 @@
   font-weight: 850;
 }
 
-.skill-table-head span:nth-child(3) {
+.skill-table-head span:nth-child(4) {
   text-align: center;
 }
 
@@ -685,7 +685,7 @@
 
 .skill-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 180px 75px 34px;
+  grid-template-columns: 34px minmax(260px, 1fr) 180px 75px;
   align-items: center;
   gap: 10px;
   min-height: 62px;
@@ -711,7 +711,7 @@
   height: 24px;
   place-items: center;
   cursor: pointer;
-  justify-self: end;
+  justify-self: center;
 }
 
 .select-checkbox input {

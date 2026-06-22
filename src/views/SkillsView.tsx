@@ -369,10 +369,10 @@ export function SkillsView({
         {!isProjectNoWorkspace && (
           <div className="skill-list-board">
             <div className="skill-table-head">
+              <span />
               <span>Skill</span>
               <span>Agent 覆盖</span>
               <span>状态</span>
-              <span />
             </div>
 
             <div className="skill-list">
@@ -537,6 +537,21 @@ function SkillRow({
 }) {
   return (
     <article className={`skill-row ${active ? "active" : ""}`} onClick={onSelect}>
+      <label
+        className={`select-checkbox ${checked ? "checked" : ""}`}
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
+        title="选择同步"
+      >
+        <input
+          aria-label={`选择同步 ${skill.displayName}`}
+          checked={checked}
+          onChange={onToggle}
+          type="checkbox"
+        />
+        <span>{checked && <Check size={14} />}</span>
+      </label>
       <button className="skill-row-main" onClick={onSelect} type="button">
         <strong>
           <span className="skill-name-text">{skill.displayName}</span>
@@ -553,21 +568,6 @@ function SkillRow({
         updating={updating}
         onUpdate={onUpdate}
       />
-      <label
-        className={`select-checkbox ${checked ? "checked" : ""}`}
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
-        title="选择同步"
-      >
-        <input
-          aria-label={`选择同步 ${skill.displayName}`}
-          checked={checked}
-          onChange={onToggle}
-          type="checkbox"
-        />
-        <span>{checked && <Check size={14} />}</span>
-      </label>
     </article>
   );
 }
