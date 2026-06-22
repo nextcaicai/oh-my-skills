@@ -6,3 +6,4 @@ src-tauri/gen
 *.log
 ui-ux-audit.md
 ui-ux-audit-cn.md
+design.md
