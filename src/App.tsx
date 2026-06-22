@@ -470,16 +470,6 @@ export default function App() {
     );
   }
 
-  function addDraftProjectFolder() {
-    void open({ directory: true, multiple: false, title: "添加项目工作区" }).then((selected) => {
-      if (typeof selected !== "string") return;
-      setDraftSettings((current) => ({
-        ...current,
-        projectFolders: Array.from(new Set([...current.projectFolders, selected]))
-      }));
-    });
-  }
-
   function toggleSkill(id: string) {
     setSelectedSkillIds((current) => {
       const next = new Set(current);
@@ -685,7 +675,6 @@ export default function App() {
             setSettingsOpen(false);
           }}
           onSave={() => void saveSettings()}
-          onAddProjectFolder={addDraftProjectFolder}
         />
       )}
     </main>

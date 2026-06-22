@@ -1,4 +1,4 @@
-import { Check, FolderPlus, XCircle } from "lucide-react";
+import { Check, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AgentIcon, StatusPill } from "./shared";
 import { agentSignalSummary, agentSkillCount } from "../lib/skillUtils";
@@ -11,8 +11,7 @@ export function SettingsSheet({
   skills = [],
   onChange,
   onClose,
-  onSave,
-  onAddProjectFolder
+  onSave
 }: {
   settings: AppSettings;
   inventory: InventorySnapshot | null;
@@ -21,9 +20,8 @@ export function SettingsSheet({
   onChange: (settings: AppSettings) => void;
   onClose: () => void;
   onSave: () => void;
-  onAddProjectFolder: () => void;
 }) {
-  const [settingsTab, setSettingsTab] = useState<"general" | "agents">("general");
+  const [settingsTab, setSettingsTab] = useState<"data" | "agents">("data");
 
   const installedCount = agents.length;
   const skillsForCount = skills.length ? skills : (inventory?.skills ?? []);
@@ -44,12 +42,12 @@ export function SettingsSheet({
           <div className="settings-tabs" role="tablist" aria-label="设置分类">
             <button
               role="tab"
-              aria-selected={settingsTab === "general"}
-              className={settingsTab === "general" ? "active" : ""}
-              onClick={() => setSettingsTab("general")}
+              aria-selected={settingsTab === "data"}
+              className={settingsTab === "data" ? "active" : ""}
+              onClick={() => setSettingsTab("data")}
               type="button"
             >
-              通用
+              数据
             </button>
             <button
               role="tab"
@@ -67,7 +65,7 @@ export function SettingsSheet({
         </div>
 
         <div className="settings-content">
-          {settingsTab === "general" && (
+          {settingsTab === "data" && (
             <>
               <section className="settings-section">
                 <label className="field">
@@ -83,31 +81,6 @@ export function SettingsSheet({
                   />
                   <span>显示原始文件路径</span>
                 </label>
-              </section>
-
-              <section className="settings-section">
-                <div className="section-heading">
-                  <h2>项目目录</h2>
-                  <button className="secondary-button" onClick={onAddProjectFolder}>
-                    <FolderPlus size={16} />
-                    添加
-                  </button>
-                </div>
-                <div className="settings-path-list">
-                  {settings.projectFolders.map((folder) => (
-                    <div className="path-row" key={folder}>
-                      <code title={folder}>{folder}</code>
-                      <button
-                        className="icon-button subtle"
-                        onClick={() => onChange({ ...settings, projectFolders: settings.projectFolders.filter((item) => item !== folder) })}
-                        title="移除项目目录"
-                      >
-                        <XCircle size={16} />
-                      </button>
-                    </div>
-                  ))}
-                  {settings.projectFolders.length === 0 && <p className="muted">还没有添加项目目录。</p>}
-                </div>
               </section>
 
               <section className="settings-section">
@@ -153,7 +126,7 @@ export function SettingsSheet({
         </div>
 
         <div className="sheet-actions">
-          {settingsTab === "general" ? (
+          {settingsTab === "data" ? (
             <>
               <button className="secondary-button" onClick={onClose} type="button">取消</button>
               <button className="primary-button" onClick={onSave} type="button">
