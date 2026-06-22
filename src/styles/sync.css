@@ -1,3 +1,7 @@
+.content-frame:has(.sync-page) {
+  padding-bottom: 0;
+}
+
 .sync-page {
   display: grid;
   min-height: 0;
@@ -709,12 +713,13 @@
 }
 
 .sync-action-bar {
+  --sync-action-inset: 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-top: 14px;
-  padding: 10px 12px;
+  padding: var(--sync-action-inset) 12px var(--sync-action-inset);
   border-top: 1px solid rgba(24, 26, 29, 0.08);
 }
 
