@@ -91,7 +91,9 @@
 }
 
 .selected-skill-shell.empty .selected-skill-list {
-  min-height: 52px;
+  min-height: 28px;
+  padding-top: 2px;
+  align-items: flex-start;
 }
 
 .selected-skill-card {
@@ -112,7 +114,8 @@
 .selected-skill-empty {
   display: flex;
   align-items: center;
-  min-height: 52px;
+  min-height: 24px;
+  padding: 2px 0;
   color: rgba(23, 25, 28, 0.50);
   font-size: 12px;
 }
@@ -236,7 +239,7 @@
 .sync-mode-header {
   display: grid;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .sync-mode-desc {
@@ -272,7 +275,7 @@
 .sync-form-pane {
   display: grid;
   align-content: start;
-  gap: 14px;
+  gap: 16px;
 }
 
 .sync-confirm-pane {
@@ -458,15 +461,12 @@
   font-size: 12px;
 }
 
-.target-picker {
-  display: grid;
-  gap: 8px;
-}
-
 .selected-target-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-height: 28px;
+  align-items: flex-start;
 }
 
 .selected-target-card {
@@ -562,6 +562,10 @@
 
 .target-helper,
 .target-empty {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 0;
   overflow: hidden;
   color: rgba(23, 25, 28, 0.58);
   font-size: 12px;
@@ -705,7 +709,7 @@
   justify-content: space-between;
   gap: 12px;
   margin-top: 14px;
-  padding: 10px 10px 0;
+  padding: 10px 12px;
   border-top: 1px solid rgba(24, 26, 29, 0.08);
 }
 
@@ -726,6 +730,30 @@
 .action-preview .preview-sep {
   color: rgba(23, 25, 28, 0.35);
   font-size: 11px;
+}
+
+.plan-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: rgba(35, 139, 105, 0.12);
+  color: #116149;
+  white-space: nowrap;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plan-status-pill svg {
+  flex-shrink: 0;
+}
+
+.plan-status-pill.blocked {
+  background: rgba(190, 62, 49, 0.12);
+  color: #9d2d24;
 }
 
 .action-buttons-end {

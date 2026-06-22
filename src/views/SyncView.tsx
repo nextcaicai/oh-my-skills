@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowRight, Check, ChevronLeft, ChevronRight, Copy, CopyCheck, FolderPlus, Globe2, Link2, Plus, ShieldCheck, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AgentIcon, InfoBlock } from "../components/shared";
+import { AgentIcon } from "../components/shared";
 import { agentSignalSummary, compactPath, firstValidInstallation, syncPlanSummary } from "../lib/skillUtils";
 import type { AgentRecord, AgentTarget, ApplyResult, Settings as AppSettings, SkillRecord, SyncPlan } from "../types";
 import type { QuickMigrationMethod, SyncMode } from "../uiTypes";
@@ -275,7 +275,7 @@ export function SyncView({
                       </div>
                     );
                   })}
-                  {queuedSkills.length === 0 && <span className="selected-skill-empty">还没有选择 Skill。</span>}
+                  {queuedSkills.length === 0 && <span className="selected-skill-empty">请至少选择一个 Skill</span>}
                 </div>
                 {selectedSkillScrollState.right && (
                   <button
@@ -344,9 +344,11 @@ export function SyncView({
                 </div>
               )}
             >
-              <div className="target-picker">
-                <div className="selected-target-row">
-                  {selectedTargets.map((agent) => {
+              <div className="selected-target-row">
+                {selectedTargets.length === 0 ? (
+                  <span className="target-helper">请添加至少 1 个目标 Agent。</span>
+                ) : (
+                  selectedTargets.map((agent) => {
                     const pathPreview = targetPathPreview(agent, targetScope, selectedProjectPath);
                     const signal = agentSignalSummary(agent) || "Agent";
                     return (
@@ -361,9 +363,8 @@ export function SyncView({
                         </span>
                       </button>
                     );
-                  })}
-                </div>
-                {selectedTargets.length === 0 && <span className="target-helper">请添加至少 1 个目标 Agent。</span>}
+                  })
+                )}
               </div>
             </SyncSection>
 
@@ -405,26 +406,7 @@ export function SyncView({
               <ShieldCheck size={24} />
             </div>
 
-            {activePlan && (
-              <div className={`confirm-summary ${blocked ? "blocked" : ""}`}>
-                {blocked ? <AlertTriangle size={22} /> : <Check size={22} />}
-                <div className="summary-body">
-                  <strong>{confirmationText}</strong>
-                </div>
-              </div>
-            )}
 
-
-            {summary && (
-              <div className="sync-summary-grid" aria-label="同步摘要">
-                <InfoBlock label="创建" value={`${summary.create}`} />
-                <InfoBlock label="覆盖/移除" value={`${summary.overwrite}`} />
-                <InfoBlock label="备份" value={`${summary.backup}`} />
-                <InfoBlock label="软链接" value={`${summary.symlink}`} />
-                <InfoBlock label="跳过" value={`${summary.noop}`} />
-                <InfoBlock label="阻塞" value={`${activePlan?.blockedConflicts.length ?? 0}`} />
-              </div>
-            )}
 
 
             {activePlan && activePlan.preconditions.length > 0 && (
@@ -458,14 +440,19 @@ export function SyncView({
         </div>
 
         <div className="sync-action-bar">
-          {bottomPreviewText && (
+          {activePlan ? (
+            <div className={`plan-status-pill ${blocked ? "blocked" : ""}`}>
+              {blocked ? <AlertTriangle size={14} /> : <Check size={14} />}
+              <span>{confirmationText}</span>
+            </div>
+          ) : bottomPreviewText ? (
             <div className="action-preview">
               <span className="preview-label">操作预览</span>
               <span className="preview-sep"> · </span>
               {bottomPreviewText}
             </div>
-          )}
-          <div className={bottomPreviewText ? "" : "action-buttons-end"}>
+          ) : null}
+          <div className="action-buttons-end">
             {generatedPlan ? (
               <div className="button-pair">
                 <button className="secondary-button large" disabled={actionDisabled} onClick={previewPlan}>
