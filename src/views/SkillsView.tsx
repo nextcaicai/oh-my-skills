@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, FileText, FolderOpen, FolderPlus, Github, Home, RefreshCw, Search, XCircle } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, FolderOpen, FolderPlus, Github, RefreshCw, Search, XCircle } from "lucide-react";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { AgentEmptyVisual, ProjectEmptyVisual } from "../components/EmptyStateVisuals";
 import { AgentBadge, AgentIcon, Coverage, IssueList, SkillState } from "../components/shared";
 import { demoAgent } from "../lib/demoData";
 import { isTauriRuntime } from "../lib/runtime";
@@ -147,16 +148,21 @@ export function SkillsView({
     : `管理这台机器上各 Agent 的全局 Skills，已发现 ${sourceSkills.length} 个。`;
   const hasProjectWorkspaces = projectFolders.length > 0;
   const isProjectNoWorkspace = isProjectWorkspace && !hasProjectWorkspaces;
-  const emptyTitle = isProjectWorkspace
-    ? hasProjectWorkspaces
-      ? "这个项目还没有项目级 Skills"
-      : "尚未关联项目工作区"
-    : "还没有全局 Skills";
-  const emptyBody = isProjectWorkspace
-    ? hasProjectWorkspaces
-      ? "可以从中心库同步到当前项目，或创建某个 Agent 的项目 skills 目录。"
-      : "选择一个项目根目录后，Oh My Skills 会自动检测该项目下各 Agent 的项目级 Skills。"
-    : "重新扫描或从中心库同步到某个 Agent 后，这里会显示机器级生效的 Skills。";
+  const isFiltered = Boolean(query.trim()) || agentFilter !== "all";
+  const emptyTitle = isFiltered
+    ? "没有找到匹配的 Skills"
+    : isProjectWorkspace
+      ? hasProjectWorkspaces
+        ? "这个项目还没有项目级 Skills"
+        : "尚未关联项目工作区"
+      : "还没有全局 Skills";
+  const emptyBody = isFiltered
+    ? "换个关键词试试，或切换 Agent、清空搜索条件。"
+    : isProjectWorkspace
+      ? hasProjectWorkspaces
+        ? "可以从中心库同步到当前项目，或创建某个 Agent 的项目 skills 目录。"
+        : "选择一个项目根目录后，Oh My Skills 会自动检测该项目下各 Agent 的项目级 Skills。"
+      : "重新扫描或从中心库同步到某个 Agent 后，这里会显示机器级生效的 Skills。";
   const selectedSkills = selectedSkillsInOrder(selectedSkillIds, allSkills);
   const selectedCount = selectedSkills.length;
   const recentSelectedSkills = selectedSkills.slice(-2);
@@ -403,11 +409,16 @@ export function SkillsView({
                 );
               })}
               {skills.length === 0 && (
-                <div className="empty-list">
-                  <FileText size={28} />
-                  <strong>{emptyTitle}</strong>
-                  <span>{query || agentFilter !== "all" ? "试试切换 Agent 或清空搜索。" : emptyBody}</span>
-                </div>
+                <SkillsListEmptyState
+                  title={emptyTitle}
+                  body={emptyBody}
+                  workspace={workspace}
+                  isFiltered={isFiltered}
+                  onClearFilters={() => {
+                    onQuery("");
+                    onAgentFilter("all");
+                  }}
+                />
               )}
             </div>
           </div>
@@ -447,6 +458,35 @@ export function SkillsView({
   );
 }
 
+function SkillsListEmptyState({
+  title,
+  body,
+  workspace,
+  isFiltered,
+  onClearFilters
+}: {
+  title: string;
+  body: string;
+  workspace: SkillWorkspace;
+  isFiltered: boolean;
+  onClearFilters: () => void;
+}) {
+  return (
+    <section className="agent-empty-state" aria-label="Skills 列表空状态">
+      {workspace === "project" ? <ProjectEmptyVisual /> : <AgentEmptyVisual />}
+      <div className="agent-empty-copy">
+        <strong>{title}</strong>
+        <span>{body}</span>
+      </div>
+      {isFiltered && (
+        <button className="secondary-button" onClick={onClearFilters} type="button">
+          清空搜索条件
+        </button>
+      )}
+    </section>
+  );
+}
+
 function ProjectWorkspaceEmptyState({
   onAddProject,
   onDiscoverProjects
@@ -456,29 +496,7 @@ function ProjectWorkspaceEmptyState({
 }) {
   return (
     <section className="project-empty-state" aria-label="项目工作区空状态">
-      <div className="project-empty-visual" aria-hidden="true">
-        <div className="project-empty-card card-back">
-          <span className="project-empty-icon small"><Home size={18} /></span>
-          <span className="project-empty-lines">
-            <i />
-            <i className="short" />
-          </span>
-        </div>
-        <div className="project-empty-card card-front">
-          <span className="project-empty-icon"><Home size={26} /></span>
-          <span className="project-empty-lines">
-            <i />
-            <i className="short" />
-          </span>
-        </div>
-        <div className="project-empty-card card-low">
-          <span className="project-empty-icon small"><Home size={18} /></span>
-          <span className="project-empty-lines">
-            <i />
-            <i className="short" />
-          </span>
-        </div>
-      </div>
+      <ProjectEmptyVisual />
 
       <div className="agent-empty-copy project-empty-copy">
         <strong>尚未关联项目工作区</strong>

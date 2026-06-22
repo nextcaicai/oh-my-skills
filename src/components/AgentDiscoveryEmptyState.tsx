@@ -1,16 +1,5 @@
 import { Loader2 } from "lucide-react";
-import type { CSSProperties } from "react";
-import { agentIconAsset } from "../agentIconRegistry";
-
-export const emptyStateAgentIds = [
-  "codex",
-  "claude-code",
-  "cursor",
-  "windsurf",
-  "gemini-cli",
-  "qwen_code",
-  "opencode"
-];
+import { AgentEmptyVisual } from "./EmptyStateVisuals";
 
 export function AgentDiscoveryEmptyState({
   busy,
@@ -27,22 +16,7 @@ export function AgentDiscoveryEmptyState({
 
   return (
     <section className="agent-empty-state" aria-label="发现 Skills 空状态">
-      <div className="agent-empty-visual" aria-hidden="true">
-        {emptyStateAgentIds.map((agentId, index) => {
-          const icon = agentIconAsset(agentId);
-          if (!icon) return null;
-          const style = {
-            "--slot-index": index,
-            "--agent-icon-size": `${icon.size ?? 25}px`
-          } as CSSProperties;
-
-          return (
-            <span className={`agent-empty-logo logo-${index + 1}`} key={agentId} style={style}>
-              <img alt="" src={icon.src} />
-            </span>
-          );
-        })}
-      </div>
+      <AgentEmptyVisual />
 
       <div className="agent-empty-copy">
         {isFirstUse ? (

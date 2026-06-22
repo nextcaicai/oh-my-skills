@@ -182,8 +182,23 @@
 }
 
 .skill-list > .agent-empty-state {
-  min-height: 280px;
+  min-height: 100%;
+  padding: 28px 0 20px;
   justify-content: center;
+}
+
+.skill-list > .agent-empty-state .agent-empty-visual {
+  width: min(480px, 72vw);
+  height: 220px;
+  margin-bottom: 20px;
+}
+
+.skill-list > .agent-empty-state .agent-empty-copy strong {
+  font-size: 20px;
+}
+
+.skill-list > .agent-empty-state .agent-empty-copy span {
+  font-size: 15px;
 }
 
 .project-empty-state {
