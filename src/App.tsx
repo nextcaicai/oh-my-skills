@@ -1698,8 +1698,22 @@ function SyncView({
             type="button"
             aria-selected={syncMode === "managed"}
           >
-            纳入中心库并同步
+            导入中心库并同步
           </button>
+        </div>
+
+        <div className="sync-mode-desc">
+          {syncMode === "quick" ? (
+            <>
+              <span className="mode-tag">最快完成</span>
+              直接复制或创建软链接到目标 Agent，不使用中心库
+            </>
+          ) : (
+            <>
+              <span className="mode-tag">长期管理</span>
+              先复制到中心库，再用软链接分发到目标 Agent
+            </>
+          )}
         </div>
 
         <div className="sync-work-grid">

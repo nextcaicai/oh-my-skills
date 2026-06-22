@@ -1789,7 +1789,7 @@ p {
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
-  padding: 14px;
+  padding: 14px 14px 14px 0;
 }
 
 .choice-card,
@@ -1958,7 +1958,7 @@ p {
 }
 
 .sync-mode-tabs {
-  margin-bottom: 14px;
+  margin-bottom: 2px;
 }
 
 .sync-mode-tabs button {
@@ -1967,6 +1967,25 @@ p {
 
 .sync-mode-tabs button:last-child {
   min-width: 168px;
+}
+
+.sync-mode-desc {
+  margin-bottom: 10px;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(23, 25, 28, 0.58);
+}
+
+.sync-mode-desc .mode-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(24, 26, 29, 0.08);
+  color: #2f3338;
+  font-size: 11px;
+  font-weight: 850;
 }
 
 .sync-work-grid {
