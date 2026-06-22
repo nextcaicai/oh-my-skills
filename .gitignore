@@ -4,3 +4,5 @@ src-tauri/target
 src-tauri/gen
 .DS_Store
 *.log
+ui-ux-audit.md
+ui-ux-audit-cn.md

@@ -275,7 +275,7 @@ export function SyncView({
                       </div>
                     );
                   })}
-                  {queuedSkills.length === 0 && <span className="selected-skill-empty">请至少选择一个 Skill</span>}
+                  {queuedSkills.length === 0 && <span className="selected-skill-empty">请至少选择 1 个 Skill。</span>}
                 </div>
                 {selectedSkillScrollState.right && (
                   <button
