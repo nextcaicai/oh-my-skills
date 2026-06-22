@@ -151,6 +151,7 @@ export type InstallationRef = {
 export type AgentTarget = {
   agentId: string;
   scope?: string;
+  projectPath?: string;
 };
 
 export type SyncOperation = {

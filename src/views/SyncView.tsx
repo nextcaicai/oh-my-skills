@@ -18,6 +18,7 @@ export function SyncView({
   onPreviewQuick,
   onApply,
   onGoSkills,
+  onChooseProject,
   syncMode,
   onSyncModeChange
 }: {
@@ -33,14 +34,17 @@ export function SyncView({
   onPreviewQuick: (method: QuickMigrationMethod, targets: AgentTarget[]) => void;
   onApply: () => void;
   onGoSkills: () => void;
+  onChooseProject: () => Promise<string | null>;
   syncMode: SyncMode;
   onSyncModeChange: (mode: SyncMode) => void;
 }) {
   const [quickMethod, setQuickMethod] = useState<QuickMigrationMethod>("copy");
   const [targetScope, setTargetScope] = useState<"global" | "project">("global");
+  const [selectedProjectPath, setSelectedProjectPath] = useState<string | null>(null);
   const [targetPickerOpen, setTargetPickerOpen] = useState(false);
   const [selectedTargetIds, setSelectedTargetIds] = useState<Set<string>>(() => new Set(agents.slice(0, 3).map((agent) => agent.id)));
   const [selectedSkillScrollState, setSelectedSkillScrollState] = useState({ left: false, right: false });
+  const [previewDraftKey, setPreviewDraftKey] = useState<string | null>(null);
   const targetMenuRef = useRef<HTMLDivElement>(null);
   const selectedSkillBarRef = useRef<HTMLDivElement>(null);
   const selectedSkill = queuedSkills[0] ?? null;
@@ -98,20 +102,37 @@ export function SyncView({
 
   const selectedTargets = agents.filter((agent) => selectedTargetIds.has(agent.id));
   const availableTargets = agents.filter((agent) => !selectedTargetIds.has(agent.id));
-  const targets = selectedTargets.map((agent) => ({ agentId: agent.id, scope: targetScope }));
-  const blocked = Boolean(plan?.blockedConflicts.length);
-  const summary = plan ? syncPlanSummary(plan) : null;
-  const actionDisabled = selectedSkillCount === 0 || selectedTargets.length === 0 || busy;
+  const targets = selectedTargets.map((agent) => ({
+    agentId: agent.id,
+    scope: targetScope,
+    projectPath: targetScope === "project" ? selectedProjectPath ?? undefined : undefined
+  }));
+  const draftKey = [
+    syncMode,
+    quickMethod,
+    targetScope,
+    selectedProjectPath ?? "",
+    queuedSkills.map((skill) => skill.id).sort().join("|"),
+    selectedTargets.map((agent) => agent.id).sort().join("|")
+  ].join("::");
+  const generatedPlan = Boolean(plan);
+  const stalePlan = generatedPlan && previewDraftKey !== draftKey;
+  const activePlan = stalePlan ? null : plan;
+  const blocked = Boolean(activePlan?.blockedConflicts.length);
+  const summary = activePlan ? syncPlanSummary(activePlan) : null;
+  const missingProject = targetScope === "project" && !selectedProjectPath;
+  const actionDisabled = selectedSkillCount === 0 || selectedTargets.length === 0 || missingProject || busy;
   const previewLabel = selectedSkillCount === 0
     ? "先选择 Skill 再生成预览"
+    : missingProject
+    ? "先选择项目"
     : syncMode === "quick"
     ? `生成 ${selectedSkillCount} 个快速同步预览`
     : `生成 ${selectedSkillCount} 个中心库同步预览`;
-  const generatedPlan = Boolean(plan);
   const centralPath = selectedSkillCount === 1 && selectedSkill ? `${settings.libraryPath}/${selectedSkill.slug}` : settings.libraryPath;
-  const confirmationText = plan
-    ? planSummarySentence(plan, summary)
-    : draftPlanSentence(syncMode, quickMethod, selectedSkillCount, selectedTargets.length);
+  const confirmationText = activePlan
+    ? planSummarySentence(activePlan, summary)
+    : draftPlanSentence(syncMode, quickMethod, selectedSkillCount, selectedTargets.length, targetScope, selectedProjectPath);
 
   function toggleTarget(agentId: string) {
     setSelectedTargetIds((current) => {
@@ -127,7 +148,16 @@ export function SyncView({
     setTargetPickerOpen(false);
   }
 
+  async function chooseProjectScope() {
+    const projectPath = await onChooseProject();
+    if (!projectPath) return;
+    setSelectedProjectPath(projectPath);
+    setTargetScope("project");
+  }
+
   function previewPlan() {
+    if (missingProject) return;
+    setPreviewDraftKey(draftKey);
     if (syncMode === "quick") {
       onPreviewQuick(quickMethod, targets);
     } else if (targetScope === "project") {
@@ -173,7 +203,19 @@ export function SyncView({
               </button>
             </div>
           </div>
-
+          <div className="sync-mode-desc">
+            {syncMode === "quick" ? (
+              <>
+                <span className="mode-tag">最快完成</span>
+                直接复制或创建软链接到目标 Agent，不使用中心库
+              </>
+            ) : (
+              <>
+                <span className="mode-tag">长期管理</span>
+                先复制到中心库，再用软链接分发到目标 Agent
+              </>
+            )}
+          </div>
         </div>
 
         <div className="sync-work-grid">
@@ -290,7 +332,7 @@ export function SyncView({
               <div className="target-picker">
                 <div className="selected-target-row">
                   {selectedTargets.map((agent) => {
-                    const pathPreview = targetPathPreview(agent, targetScope);
+                    const pathPreview = targetPathPreview(agent, targetScope, selectedProjectPath);
                     const signal = agentSignalSummary(agent) || "Agent";
                     return (
                       <button className="selected-target-card active" key={agent.id} onClick={() => toggleTarget(agent.id)} title={pathPreview ? compactPath(pathPreview) : "移除目标"} type="button">
@@ -319,14 +361,25 @@ export function SyncView({
                     <small>同步到各 Agent 的全局 Skills 目录</small>
                   </span>
                 </button>
-                <button className={`choice-card ${targetScope === "project" ? "active" : ""}`} onClick={() => setTargetScope("project")} type="button">
+                <button className={`choice-card ${targetScope === "project" ? "active" : ""}`} onClick={() => void chooseProjectScope()} type="button">
                   <FolderPlus size={21} />
                   <span>
-                    <strong>当前项目</strong>
-                    <small>同步到已关联项目的本地 Skills 目录</small>
+                    <strong>项目</strong>
+                    <small>{selectedProjectPath ? compactPath(selectedProjectPath) : "选择本地项目并同步进去"}</small>
                   </span>
                 </button>
               </div>
+              {targetScope === "project" && (
+                <div className={`project-target-note ${selectedProjectPath ? "" : "empty"}`}>
+                  <span>
+                    <strong>{selectedProjectPath ? projectDisplayName(selectedProjectPath) : "未选择项目"}</strong>
+                    <small title={selectedProjectPath ?? ""}>{selectedProjectPath ? compactPath(selectedProjectPath) : "点击“项目”选择一个本地项目"}</small>
+                  </span>
+                  <button className="secondary-button compact" onClick={() => void chooseProjectScope()} type="button">
+                    {selectedProjectPath ? "更换" : "选择"}
+                  </button>
+                </div>
+              )}
             </SyncSection>
             <aside className="sync-confirm-pane">
             <div className="pane-title">
@@ -341,7 +394,9 @@ export function SyncView({
               {blocked ? <AlertTriangle size={22} /> : <Check size={22} />}
               <div className="summary-body">
                 <strong>{confirmationText}</strong>
-                {!plan && selectedTargets.length > 0 && selectedSkillCount > 0 && (
+                {stalePlan ? (
+                  <span className="summary-sub">设置已变化，请重新生成详细预览</span>
+                ) : !activePlan && selectedTargets.length > 0 && selectedSkillCount > 0 && (
                   <span className="summary-sub">点击下方按钮生成详细预览</span>
                 )}
               </div>
@@ -352,7 +407,7 @@ export function SyncView({
                 <div className="dest-label">将同步到这些位置</div>
                 <div className="dest-list">
                   {selectedTargets.map((agent) => {
-                    const destPath = targetPathPreview(agent, targetScope);
+                    const destPath = targetPathPreview(agent, targetScope, selectedProjectPath);
                     const isSymlink = syncMode === "quick" && quickMethod === "symlink";
                     return (
                       <div className="dest-item" key={agent.id}>
@@ -384,7 +439,7 @@ export function SyncView({
                 <InfoBlock label="备份" value={`${summary.backup}`} />
                 <InfoBlock label="软链接" value={`${summary.symlink}`} />
                 <InfoBlock label="跳过" value={`${summary.noop}`} />
-                <InfoBlock label="阻塞" value={`${plan?.blockedConflicts.length ?? 0}`} />
+                <InfoBlock label="阻塞" value={`${activePlan?.blockedConflicts.length ?? 0}`} />
               </div>
             )}
 
@@ -399,10 +454,10 @@ export function SyncView({
               <span>有冲突的内容会在预览中被拦住，不会直接覆盖。</span>
             </div>
 
-            {plan && plan.preconditions.length > 0 && (
+            {activePlan && activePlan.preconditions.length > 0 && (
               <div className="precondition-note">
                 <strong>执行前会先确认</strong>
-                <span>{plan.preconditions.join(" · ")}</span>
+                <span>{activePlan.preconditions.join(" · ")}</span>
               </div>
             )}
             {summary && summary.backup > 0 && (
@@ -411,10 +466,10 @@ export function SyncView({
                 <span>计划会先把目标位置的现有内容移动到备份路径；如需恢复，可将备份内容复制回对应目标路径。</span>
               </div>
             )}
-            {blocked && plan && (
+            {blocked && activePlan && (
               <div className="banner warning">
                 <AlertTriangle size={17} />
-                <span>{plan.blockedConflicts.join(" · ")}</span>
+                <span>{activePlan.blockedConflicts.join(" · ")}</span>
               </div>
             )}
 
@@ -435,7 +490,7 @@ export function SyncView({
               <button className="secondary-button large" disabled={actionDisabled} onClick={previewPlan}>
                 重新生成预览
               </button>
-              <button className="primary-button large" disabled={!plan || blocked || busy} onClick={onApply}>
+              <button className="primary-button large" disabled={!activePlan || blocked || busy} onClick={onApply}>
                 <CopyCheck size={16} />
                 执行同步计划
               </button>
@@ -466,19 +521,42 @@ function SyncSection({ title, action, children }: { title: string; action?: Reac
   );
 }
 
-function targetPathPreview(agent: AgentRecord, scope: "global" | "project") {
-  return scope === "project" ? agent.projectRoots[0] : agent.globalRoots[0];
+function targetPathPreview(agent: AgentRecord, scope: "global" | "project", projectPath: string | null) {
+  if (scope === "project") {
+    const root = agent.projectRoots[0];
+    if (!projectPath || !root) return undefined;
+    return joinPath(projectPath, root);
+  }
+  return agent.globalRoots[0];
 }
 
-function draftPlanSentence(mode: SyncMode, method: QuickMigrationMethod, skillCount: number, targetCount: number) {
+function draftPlanSentence(
+  mode: SyncMode,
+  method: QuickMigrationMethod,
+  skillCount: number,
+  targetCount: number,
+  scope: "global" | "project",
+  projectPath: string | null
+) {
   if (skillCount === 0) return "请先选择至少 1 个 Skill。";
   if (targetCount === 0) return "请选择至少 1 个目标 Agent。";
+  if (scope === "project" && !projectPath) return "请选择要同步的本地项目。";
+  const scopeText = scope === "project" ? `到项目 ${projectDisplayName(projectPath ?? "")}` : "到全局";
   if (mode === "managed") {
-    return `导入中心库 ${skillCount} 个 Skill，并为 ${targetCount} 个 Agent 创建软链接。`;
+    return `导入中心库 ${skillCount} 个 Skill，并为 ${targetCount} 个 Agent ${scopeText}创建软链接。`;
   }
   return method === "copy"
-    ? `复制 ${skillCount} 个 Skill 到 ${targetCount} 个 Agent 的技能目录`
-    : `为 ${skillCount} 个 Skill 在 ${targetCount} 个 Agent 中创建软链接`;
+    ? `复制 ${skillCount} 个 Skill ${scopeText}的 ${targetCount} 个 Agent 技能目录`
+    : `为 ${skillCount} 个 Skill ${scopeText}的 ${targetCount} 个 Agent 创建软链接`;
+}
+
+function joinPath(base: string, relative: string) {
+  return `${base.replace(/\/+$/, "")}/${relative.replace(/^\/+/, "")}`;
+}
+
+function projectDisplayName(path: string) {
+  const clean = path.replace(/\/+$/, "");
+  return clean.split("/").pop() || clean;
 }
 
 function planSummarySentence(plan: SyncPlan, summary: ReturnType<typeof syncPlanSummary> | null) {

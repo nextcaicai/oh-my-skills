@@ -502,7 +502,7 @@ fn append_quick_migration_operations(
             blocked_conflicts.push(format!("{} is not detected as installed", agent.label));
             continue;
         }
-        let target_roots = target_roots_for_agent(&agent, target.scope.as_deref(), settings);
+        let target_roots = target_roots_for_agent(&agent, &target, settings);
         if target_roots.is_empty() {
             let scope = target.scope.as_deref().unwrap_or("global");
             blocked_conflicts.push(format!(
@@ -595,7 +595,7 @@ fn append_sync_operations(
             blocked_conflicts.push(format!("{} is not detected as installed", agent.label));
             continue;
         }
-        let target_roots = target_roots_for_agent(&agent, target.scope.as_deref(), &settings);
+        let target_roots = target_roots_for_agent(&agent, &target, &settings);
         if target_roots.is_empty() {
             let scope = target.scope.as_deref().unwrap_or("global");
             blocked_conflicts.push(format!(
@@ -1012,31 +1012,61 @@ fn default_targets(settings: &crate::models::Settings) -> Vec<AgentTarget> {
         .map(|agent| AgentTarget {
             agent_id: agent.id,
             scope: Some("global".to_string()),
+            project_path: None,
         })
         .collect()
 }
 
 fn target_roots_for_agent(
     agent: &crate::models::AgentDefinition,
-    scope: Option<&str>,
+    target: &AgentTarget,
     settings: &crate::models::Settings,
 ) -> Vec<(String, PathBuf)> {
-    match scope.unwrap_or("global") {
-        "project" => settings
-            .project_folders
-            .iter()
-            .flat_map(|folder| {
-                agent
-                    .project_roots
-                    .iter()
-                    .map(move |root| ("project".to_string(), PathBuf::from(folder).join(root)))
-            })
-            .collect(),
+    match target.scope.as_deref().unwrap_or("global") {
+        "project" => {
+            if let Some(project_path) = target
+                .project_path
+                .as_deref()
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+            {
+                return project_roots_for_folder(agent, project_path);
+            }
+
+            settings
+                .project_folders
+                .iter()
+                .flat_map(|folder| project_roots_for_folder(agent, folder))
+                .collect()
+        }
         _ => agent
             .global_roots
             .iter()
             .map(|root| ("global".to_string(), crate::fs_ops::expand_home(root)))
             .collect(),
+    }
+}
+
+fn project_roots_for_folder(
+    agent: &crate::models::AgentDefinition,
+    project_path: &str,
+) -> Vec<(String, PathBuf)> {
+    let project_path = crate::fs_ops::expand_home(project_path);
+    let roots = agent
+        .project_roots
+        .iter()
+        .map(|root| ("project".to_string(), project_path.join(root)))
+        .collect::<Vec<_>>();
+    let existing_roots = roots
+        .iter()
+        .filter(|(_, root)| root.exists())
+        .cloned()
+        .collect::<Vec<_>>();
+
+    if existing_roots.is_empty() {
+        roots.into_iter().take(1).collect()
+    } else {
+        existing_roots
     }
 }
 

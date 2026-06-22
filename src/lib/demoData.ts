@@ -136,7 +136,9 @@ function demoPlan(skill: SkillRecord, targets: AgentTarget[], kind: "adopt" | "s
         opType: "create-symlink",
         status: "planned",
         sourcePath: `/Users/example/.oh-my-skills/skills/${skill.slug}`,
-        targetPath: `/Users/example/.${target.agentId}/skills/${skill.slug}`,
+        targetPath: target.scope === "project" && target.projectPath
+          ? `${target.projectPath}/.agents/skills/${skill.slug}`
+          : `/Users/example/.${target.agentId}/skills/${skill.slug}`,
         message: `同步 ${skill.displayName} 到 ${target.agentId} ${target.scope ?? "global"}`,
         agentId: target.agentId,
         skillId: skill.id

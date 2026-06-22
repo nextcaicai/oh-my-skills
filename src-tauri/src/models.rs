@@ -227,6 +227,7 @@ pub struct InstallationRef {
 pub struct AgentTarget {
     pub agent_id: String,
     pub scope: Option<String>,
+    pub project_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -411,6 +411,15 @@ export default function App() {
     await addProjectPath(selected);
   }
 
+  async function chooseSyncProject() {
+    if (!isTauriRuntime()) {
+      return "/Users/example/Projects/demo-project";
+    }
+
+    const selected = await open({ directory: true, multiple: false, title: "选择要同步的项目" });
+    return typeof selected === "string" ? selected : null;
+  }
+
   async function discoverProjectWorkspaces() {
     const selected = await open({ directory: true, multiple: false, title: "扫描发现项目工作区" });
     if (typeof selected !== "string") return;
@@ -657,6 +666,7 @@ export default function App() {
             onPreviewGlobal={(targets) => void previewSkillsSync(queuedSkills, targets)}
             onPreviewProject={(targets) => void previewSkillsSync(queuedSkills, targets)}
             onPreviewQuick={(method, targets) => void previewQuickMigration(queuedSkills, method, targets)}
+            onChooseProject={chooseSyncProject}
             onApply={() => void applyPlan()}
             onGoSkills={() => setView("skills")}
           />
