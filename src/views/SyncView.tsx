@@ -102,7 +102,9 @@ export function SyncView({
   const blocked = Boolean(plan?.blockedConflicts.length);
   const summary = plan ? syncPlanSummary(plan) : null;
   const actionDisabled = selectedSkillCount === 0 || selectedTargets.length === 0 || busy;
-  const previewLabel = syncMode === "quick"
+  const previewLabel = selectedSkillCount === 0
+    ? "先选择 Skill 再生成预览"
+    : syncMode === "quick"
     ? `生成 ${selectedSkillCount} 个快速同步预览`
     : `生成 ${selectedSkillCount} 个中心库同步预览`;
   const generatedPlan = Boolean(plan);
@@ -148,41 +150,43 @@ export function SyncView({
   return (
     <div className="sync-page">
       <section className="sync-main-pane">
-        <div className="sync-toolbar">
-          <div className="scope-tabs sync-mode-tabs" role="tablist" aria-label="同步模式">
-            <button
-              className={syncMode === "quick" ? "active" : ""}
-              onClick={() => onSyncModeChange("quick")}
-              role="tab"
-              type="button"
-              aria-selected={syncMode === "quick"}
-            >
-              快速同步
-            </button>
-            <button
-              className={syncMode === "managed" ? "active" : ""}
-              onClick={() => onSyncModeChange("managed")}
-              role="tab"
-              type="button"
-              aria-selected={syncMode === "managed"}
-            >
-              导入中心库并同步
-            </button>
+        <div className="sync-mode-header">
+          <div className="sync-toolbar">
+            <div className="scope-tabs sync-mode-tabs" role="tablist" aria-label="同步模式">
+              <button
+                className={syncMode === "quick" ? "active" : ""}
+                onClick={() => onSyncModeChange("quick")}
+                role="tab"
+                type="button"
+                aria-selected={syncMode === "quick"}
+              >
+                快速同步
+              </button>
+              <button
+                className={syncMode === "managed" ? "active" : ""}
+                onClick={() => onSyncModeChange("managed")}
+                role="tab"
+                type="button"
+                aria-selected={syncMode === "managed"}
+              >
+                导入中心库并同步
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div className="sync-mode-desc">
-          {syncMode === "quick" ? (
-            <>
-              <span className="mode-tag">最快完成</span>
-              直接复制或创建软链接到目标 Agent，不使用中心库
-            </>
-          ) : (
-            <>
-              <span className="mode-tag">长期管理</span>
-              先复制到中心库，再用软链接分发到目标 Agent
-            </>
-          )}
+          <div className="sync-mode-desc">
+            {syncMode === "quick" ? (
+              <>
+                <span className="mode-tag">最快完成</span>
+                直接复制或创建软链接到目标 Agent，不使用中心库
+              </>
+            ) : (
+              <>
+                <span className="mode-tag">长期管理</span>
+                先复制到中心库，再用软链接分发到目标 Agent
+              </>
+            )}
+          </div>
         </div>
 
         <div className="sync-work-grid">
@@ -286,18 +290,12 @@ export function SyncView({
                   </button>
                   {targetPickerOpen && (
                     <div className="target-add-menu" role="menu">
-                      {availableTargets.map((agent) => {
-                        const pathPreview = targetPathPreview(agent, targetScope);
-                        return (
-                          <button key={agent.id} onClick={() => addTarget(agent.id)} type="button">
-                            <AgentIcon agent={agent} />
-                            <span>
-                              <strong>{agent.label}</strong>
-                              <small>{pathPreview ? compactPath(pathPreview) : "暂无项目路径"}</small>
-                            </span>
-                          </button>
-                        );
-                      })}
+                      {availableTargets.map((agent) => (
+                        <button key={agent.id} onClick={() => addTarget(agent.id)} type="button">
+                          <AgentIcon agent={agent} />
+                          <strong>{agent.label}</strong>
+                        </button>
+                      ))}
                       {availableTargets.length === 0 && <span className="target-empty">所有 Agent 已添加</span>}
                     </div>
                   )}
