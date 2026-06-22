@@ -12,8 +12,9 @@
 }
 
 .choice-card,
-.selected-target-chip,
+.selected-target-card,
 .managed-library-card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -24,9 +25,44 @@
   color: var(--app-text);
 }
 
-.choice-card.active {
-  background: rgba(255, 255, 255, 0.58);
-  border-color: rgba(24, 26, 29, 0.24);
+.choice-card,
+.selected-target-card {
+  overflow: hidden;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.choice-card:hover:not(.active),
+.selected-target-card:hover:not(.active) {
+  border-color: rgba(24, 26, 29, 0.20);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.choice-card.active,
+.selected-target-card.active {
+  background: rgba(47, 111, 237, 0.07);
+  border-color: rgba(47, 111, 237, 0.34);
+}
+
+.choice-card.active::before,
+.selected-target-card.active::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 999px 999px 0;
+  background: rgba(47, 111, 237, 0.62);
+  content: "";
+}
+
+.choice-card.active > svg {
+  color: #2f6fed;
+}
+
+.choice-card.active strong,
+.selected-target-card.active strong {
+  font-weight: 850;
 }
 
 .choice-card > svg,
@@ -36,6 +72,7 @@
 }
 
 .choice-card span,
+.target-card-main,
 .managed-library-card span {
   display: grid;
   min-width: 0;
@@ -123,14 +160,17 @@
   width: 24px;
   height: 24px;
   place-items: center;
-  border: 1px solid rgba(24, 26, 29, 0.12);
+  border: 1px solid rgba(24, 26, 29, 0.16);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.56);
-  color: rgba(23, 25, 28, 0.48);
+  background: rgba(255, 255, 255, 0.82);
+  color: rgba(23, 25, 28, 0.46);
   cursor: pointer;
+  box-shadow: 0 1px 2px rgba(22, 24, 26, 0.05);
 }
 
 .selected-skill-remove:hover {
+  border-color: rgba(157, 45, 36, 0.24);
+  background: rgba(157, 45, 36, 0.06);
   color: #9d2d24;
 }
 
@@ -160,14 +200,17 @@
 }
 
 .choice-card strong,
+.target-card-main strong,
 .managed-library-card strong {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 14px;
+  line-height: 1.25;
 }
 
-.choice-card small {
+.choice-card small,
+.target-card-main small {
   overflow: hidden;
   color: rgba(23, 25, 28, 0.58);
   font-size: 12px;
@@ -190,28 +233,7 @@
 
 .sync-mode-header {
   display: grid;
-  gap: 10px;
   margin-bottom: 14px;
-}
-
-.sync-mode-desc {
-  min-height: 17px;
-  margin-left: 12px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: rgba(23, 25, 28, 0.58);
-  white-space: normal;
-}
-
-.sync-mode-desc .mode-tag {
-  display: inline-block;
-  margin-right: 6px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(24, 26, 29, 0.08);
-  color: #2f3338;
-  font-size: 11px;
-  font-weight: 850;
 }
 
 .sync-work-grid {
@@ -278,18 +300,8 @@
 .sync-section-title > div {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
-}
-
-.sync-section-title span {
-  display: inline-grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border-radius: 7px;
-  background: rgba(24, 26, 29, 0.08);
-  color: rgba(23, 25, 28, 0.72);
 }
 
 .sync-section-icon-action {
@@ -340,9 +352,9 @@
 
 .choice-card {
   width: 312px;
-  min-height: 64px;
+  min-height: 72px;
   justify-content: flex-start;
-  padding: 12px;
+  padding: 12px 14px;
   text-align: left;
 }
 
@@ -357,30 +369,45 @@
   gap: 8px;
 }
 
-.selected-target-chip {
-  min-height: 46px;
-  padding: 0 14px 0 10px;
+.selected-target-card {
+  width: 312px;
+  min-height: 72px;
+  justify-content: flex-start;
+  padding: 12px 12px 12px 14px;
+  text-align: left;
+  cursor: pointer;
 }
 
-.selected-target-chip {
-  background: rgba(255, 255, 255, 0.58);
-  border-color: rgba(24, 26, 29, 0.12);
-  color: var(--app-text);
-}
-
-.selected-target-chip > svg:first-child {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  padding: 2px;
-  border-radius: 5px;
-  background: #2f6fed;
-  color: #fff;
-}
-
-.selected-target-chip .agent-icon,
+.selected-target-card .agent-icon,
 .target-add-menu .agent-icon {
   flex: 0 0 auto;
+}
+
+.selected-target-card .agent-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+
+.selected-target-card .agent-icon img {
+  max-width: 28px;
+  max-height: 28px;
+}
+
+.target-card-main {
+  flex: 1;
+}
+
+.target-card-check {
+  display: grid;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid rgba(47, 111, 237, 0.28);
+  border-radius: 6px;
+  background: #2f6fed;
+  color: #fff;
 }
 
 .target-add-wrap {

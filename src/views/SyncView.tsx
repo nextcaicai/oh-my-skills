@@ -1,7 +1,7 @@
-import { AlertTriangle, ArrowRight, Check, ChevronLeft, ChevronRight, CopyCheck, FolderPlus, Globe2, Link2, Plus, ShieldCheck, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, ChevronLeft, ChevronRight, Copy, CopyCheck, FolderPlus, Globe2, Link2, Plus, ShieldCheck, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AgentIcon, InfoBlock } from "../components/shared";
-import { compactPath, firstValidInstallation, syncPlanSummary } from "../lib/skillUtils";
+import { agentSignalSummary, compactPath, firstValidInstallation, syncPlanSummary } from "../lib/skillUtils";
 import type { AgentRecord, AgentTarget, ApplyResult, Settings as AppSettings, SkillRecord, SyncPlan } from "../types";
 import type { QuickMigrationMethod, SyncMode } from "../uiTypes";
 
@@ -174,25 +174,11 @@ export function SyncView({
             </div>
           </div>
 
-          <div className="sync-mode-desc">
-            {syncMode === "quick" ? (
-              <>
-                <span className="mode-tag">最快完成</span>
-                直接复制或创建软链接到目标 Agent，不使用中心库
-              </>
-            ) : (
-              <>
-                <span className="mode-tag">长期管理</span>
-                先复制到中心库，再用软链接分发到目标 Agent
-              </>
-            )}
-          </div>
         </div>
 
         <div className="sync-work-grid">
           <section className="sync-form-pane">
             <SyncSection
-              number="1"
               title="已选 Skill"
               action={(
                 <button className="sync-section-icon-action" onClick={onGoSkills} title="选择 Skill" type="button">
@@ -228,7 +214,7 @@ export function SyncView({
                           </small>
                         </span>
                         <button className="selected-skill-remove" onClick={() => onRemoveSkill(skill.id)} title="取消选择" type="button">
-                          <XCircle size={14} />
+                          <X size={14} />
                         </button>
                       </div>
                     );
@@ -249,10 +235,10 @@ export function SyncView({
             </SyncSection>
 
             {syncMode === "quick" ? (
-              <SyncSection number="2" title="同步方式">
+              <SyncSection title="同步方式">
                 <div className="option-grid two">
                   <button className={`choice-card ${quickMethod === "copy" ? "active" : ""}`} onClick={() => setQuickMethod("copy")} type="button">
-                    <CopyCheck size={20} />
+                    <Copy size={20} />
                     <span>
                       <strong>复制副本</strong>
                       <small>复制后目标 Agent 拥有独立副本</small>
@@ -268,7 +254,7 @@ export function SyncView({
                 </div>
               </SyncSection>
             ) : (
-              <SyncSection number="2" title="中心库副本">
+              <SyncSection title="中心库副本">
                 <div className="managed-library-card">
                   <Link2 size={20} />
                   <span>
@@ -281,7 +267,6 @@ export function SyncView({
             )}
 
             <SyncSection
-              number="3"
               title="目标 Agent（可多选）"
               action={(
                 <div className="target-add-wrap title-add" ref={targetMenuRef}>
@@ -306,11 +291,17 @@ export function SyncView({
                 <div className="selected-target-row">
                   {selectedTargets.map((agent) => {
                     const pathPreview = targetPathPreview(agent, targetScope);
+                    const signal = agentSignalSummary(agent) || "Agent";
                     return (
-                      <button className="selected-target-chip" key={agent.id} onClick={() => toggleTarget(agent.id)} title={pathPreview ? compactPath(pathPreview) : "移除目标"} type="button">
-                        <Check size={15} />
+                      <button className="selected-target-card active" key={agent.id} onClick={() => toggleTarget(agent.id)} title={pathPreview ? compactPath(pathPreview) : "移除目标"} type="button">
                         <AgentIcon agent={agent} />
-                        <strong>{agent.label}</strong>
+                        <span className="target-card-main">
+                          <strong>{agent.label}</strong>
+                          <small>{signal}</small>
+                        </span>
+                        <span className="target-card-check" aria-hidden="true">
+                          <Check size={14} />
+                        </span>
                       </button>
                     );
                   })}
@@ -319,7 +310,7 @@ export function SyncView({
               </div>
             </SyncSection>
 
-            <SyncSection number="4" title="生效范围">
+            <SyncSection title="生效范围">
               <div className="option-grid two">
                 <button className={`choice-card ${targetScope === "global" ? "active" : ""}`} onClick={() => setTargetScope("global")} type="button">
                   <Globe2 size={21} />
@@ -461,12 +452,11 @@ export function SyncView({
   );
 }
 
-function SyncSection({ number, title, action, children }: { number: string; title: string; action?: ReactNode; children: ReactNode }) {
+function SyncSection({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section className="sync-section">
       <div className="sync-section-title">
         <div>
-          <span>{number}</span>
           <strong>{title}</strong>
           {action}
         </div>

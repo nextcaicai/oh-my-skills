@@ -258,8 +258,8 @@ export function agentSkillCount(agentId: string, skills: SkillRecord[]) {
 export function agentSignalSummary(agent: AgentRecord) {
   const labels = agent.detectionSources.flatMap((source) => {
     if (source.kind === "cli") return ["CLI"];
-    if (source.kind === "app") return ["App"];
-    if (source.kind === "extension") return ["扩展"];
+    if (source.kind === "app") return ["APP"];
+    if (source.kind === "extension") return ["插件"];
     if (source.kind === "plugin-installed") return ["插件"];
     return [];
   });
