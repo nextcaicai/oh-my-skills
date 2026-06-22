@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Oh My Skills ${{ github.ref_name }}"
+          releaseBody: |
+            ## Oh My Skills ${{ github.ref_name }}
+
+            ### Downloads
+            - macOS (Apple Silicon): See assets below (`.dmg`)
+            
+            ### Changes
+            See the [full changelog](https://github.com/nextcaicai/oh-my-skills/compare/previous...${{ github.ref_name }}) or release notes.
+          releaseDraft: false
+          prerelease: false
+          # Build for Apple Silicon (aarch64). Add more targets if needed.
+          args: --target aarch64-apple-darwin
+
+      - name: Upload DMG as artifact (backup)
+        uses: actions/upload-artifact@v4
+        with:
+          name: oh-my-skills-dmg
+          path: |
+            src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: warn

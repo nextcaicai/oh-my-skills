@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/nextcaicai/oh-my-skills.git"
+  },
+  "homepage": "https://github.com/nextcaicai/oh-my-skills",
+  "bugs": {
+    "url": "https://github.com/nextcaicai/oh-my-skills/issues"
+  },
   "scripts": {
     "dev": "vite --host localhost --port 1420 --strictPort",
     "build": "tsc && vite build",

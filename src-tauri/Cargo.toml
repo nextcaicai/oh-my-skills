@@ -5,6 +5,9 @@ description = "Desktop workbench for local Agent Skills"
 authors = ["Oh My Skills"]
 edition = "2021"
 rust-version = "1.77.2"
+repository = "https://github.com/nextcaicai/oh-my-skills"
+homepage = "https://github.com/nextcaicai/oh-my-skills"
+license = "MIT"
 
 [lib]
 name = "oh_my_skills_lib"
