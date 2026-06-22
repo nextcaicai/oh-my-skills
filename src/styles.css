@@ -111,7 +111,6 @@ p {
 }
 
 .tab-bar,
-.top-actions,
 .tab-button,
 .icon-button,
 .primary-button,
@@ -152,11 +151,7 @@ p {
   color: #f9fafb;
 }
 
-.top-actions {
-  grid-column: 3;
-  justify-self: end;
-  gap: 6px;
-}
+
 
 .icon-button,
 .primary-button,
@@ -851,6 +846,13 @@ p {
   padding: 0;
 }
 
+.sync-toolbar {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0;
+}
+
 .scope-tabs {
   display: inline-flex;
   gap: 3px;
@@ -865,7 +867,7 @@ p {
 .scope-tabs button {
   min-width: 68px;
   min-height: 28px;
-  padding: 0 13px;
+  padding: 0 8px;
   border-radius: 999px;
   background: transparent;
   color: rgba(23, 25, 28, 0.66);
@@ -880,7 +882,7 @@ p {
 }
 
 .workspace-tabs button {
-  min-width: 112px;
+  min-width: 100px;
 }
 
 .skills-toolbar-actions {
@@ -925,7 +927,7 @@ p {
   color: var(--app-text);
   cursor: pointer;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 400;
   border-radius: 6px;
 }
 
@@ -1027,6 +1029,12 @@ p {
   gap: 12px;
   color: rgba(23, 25, 28, 0.58);
   font-size: 12px;
+}
+
+.skills-summary-text {
+  align-self: flex-start;
+  line-height: 1.4;
+  margin-left: 12px;
 }
 
 .project-workspace-shell {
@@ -1256,7 +1264,7 @@ p {
 
 .skill-table-head {
   display: grid;
-  grid-template-columns: 34px minmax(260px, 1fr) 230px 96px;
+  grid-template-columns: minmax(260px, 1fr) 180px 75px 34px;
   gap: 10px;
   align-items: center;
   margin-right: 18px;
@@ -1268,7 +1276,7 @@ p {
   font-weight: 850;
 }
 
-.skill-table-head span:last-child {
+.skill-table-head span:nth-child(3) {
   text-align: center;
 }
 
@@ -1282,7 +1290,7 @@ p {
 
 .skill-row {
   display: grid;
-  grid-template-columns: 34px minmax(260px, 1fr) 230px 96px;
+  grid-template-columns: minmax(260px, 1fr) 180px 75px 34px;
   align-items: center;
   gap: 10px;
   min-height: 62px;
@@ -1308,6 +1316,7 @@ p {
   height: 24px;
   place-items: center;
   cursor: pointer;
+  justify-self: end;
 }
 
 .select-checkbox input {
@@ -1346,7 +1355,7 @@ p {
 
 .skill-row-main {
   min-width: 0;
-  padding: 0;
+  padding: 0 6px 0 0;
   background: transparent;
   color: var(--app-text);
   cursor: pointer;
@@ -1789,7 +1798,7 @@ p {
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
-  padding: 14px 14px 14px 0;
+  padding: 0 14px 14px 0;
 }
 
 .choice-card,
@@ -1958,23 +1967,24 @@ p {
 }
 
 .sync-mode-tabs {
-  margin-bottom: 2px;
+  /* no extra margin; vertical centering handled by .sync-toolbar */
 }
 
 .sync-mode-tabs button {
-  min-width: 128px;
+  min-width: 90px;
 }
 
 .sync-mode-tabs button:last-child {
-  min-width: 168px;
+  min-width: 148px;
 }
 
 .sync-mode-desc {
   margin-bottom: 10px;
-  margin-top: 2px;
+  margin-top: 10px;
   font-size: 12px;
   line-height: 1.4;
   color: rgba(23, 25, 28, 0.58);
+  margin-left: 12px;
 }
 
 .sync-mode-desc .mode-tag {

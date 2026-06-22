@@ -599,11 +599,7 @@ export default function App() {
           </TabButton>
         </div>
 
-        <div className="top-actions">
-          <button className="icon-button" onClick={() => void refreshInventory()} title="重新扫描">
-            {busy ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
-          </button>
-        </div>
+
       </header>
 
       {error && (
@@ -1073,7 +1069,7 @@ function SkillsView({
         </div>
         {!isProjectNoWorkspace && (
           <div className="skills-summary">
-            <span>{tabSummary}</span>
+            <span className="skills-summary-text">{tabSummary}</span>
             {isProjectWorkspace && (
               <div className="button-pair compact">
                 <button className="secondary-button" onClick={onAddProject} type="button">
@@ -1187,10 +1183,10 @@ function SkillsView({
         {!isProjectNoWorkspace && (
           <div className="skill-list-board">
             <div className="skill-table-head">
-              <span />
               <span>Skill</span>
               <span>Agent 覆盖</span>
               <span>状态</span>
+              <span />
             </div>
 
             <div className="skill-list">
@@ -1355,21 +1351,6 @@ function SkillRow({
 }) {
   return (
     <article className={`skill-row ${active ? "active" : ""}`} onClick={onSelect}>
-      <label
-        className={`select-checkbox ${checked ? "checked" : ""}`}
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
-        title="选择同步"
-      >
-        <input
-          aria-label={`选择同步 ${skill.displayName}`}
-          checked={checked}
-          onChange={onToggle}
-          type="checkbox"
-        />
-        <span>{checked && <Check size={14} />}</span>
-      </label>
       <button className="skill-row-main" onClick={onSelect} type="button">
         <strong>
           <span className="skill-name-text">{skill.displayName}</span>
@@ -1386,6 +1367,21 @@ function SkillRow({
         updating={updating}
         onUpdate={onUpdate}
       />
+      <label
+        className={`select-checkbox ${checked ? "checked" : ""}`}
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
+        title="选择同步"
+      >
+        <input
+          aria-label={`选择同步 ${skill.displayName}`}
+          checked={checked}
+          onChange={onToggle}
+          type="checkbox"
+        />
+        <span>{checked && <Check size={14} />}</span>
+      </label>
     </article>
   );
 }
@@ -1681,25 +1677,27 @@ function SyncView({
   return (
     <div className="sync-page">
       <section className="sync-main-pane">
-        <div className="scope-tabs sync-mode-tabs" role="tablist" aria-label="同步模式">
-          <button
-            className={syncMode === "quick" ? "active" : ""}
-            onClick={() => onSyncModeChange("quick")}
-            role="tab"
-            type="button"
-            aria-selected={syncMode === "quick"}
-          >
-            快速同步
-          </button>
-          <button
-            className={syncMode === "managed" ? "active" : ""}
-            onClick={() => onSyncModeChange("managed")}
-            role="tab"
-            type="button"
-            aria-selected={syncMode === "managed"}
-          >
-            导入中心库并同步
-          </button>
+        <div className="sync-toolbar">
+          <div className="scope-tabs sync-mode-tabs" role="tablist" aria-label="同步模式">
+            <button
+              className={syncMode === "quick" ? "active" : ""}
+              onClick={() => onSyncModeChange("quick")}
+              role="tab"
+              type="button"
+              aria-selected={syncMode === "quick"}
+            >
+              快速同步
+            </button>
+            <button
+              className={syncMode === "managed" ? "active" : ""}
+              onClick={() => onSyncModeChange("managed")}
+              role="tab"
+              type="button"
+              aria-selected={syncMode === "managed"}
+            >
+              导入中心库并同步
+            </button>
+          </div>
         </div>
 
         <div className="sync-mode-desc">
