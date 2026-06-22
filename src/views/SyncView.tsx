@@ -134,6 +134,19 @@ export function SyncView({
     ? planSummarySentence(activePlan, summary)
     : draftPlanSentence(syncMode, quickMethod, selectedSkillCount, selectedTargets.length, targetScope, selectedProjectPath);
 
+  const canShowBottomPreview =
+    selectedSkillCount > 0 && selectedTargets.length > 0 && !missingProject;
+  const bottomPreviewText = canShowBottomPreview
+    ? getOperationPreview(
+        selectedSkillCount,
+        selectedTargets.length,
+        targetScope,
+        Boolean(activePlan),
+        quickMethod,
+        syncMode
+      )
+    : null;
+
   function toggleTarget(agentId: string) {
     setSelectedTargetIds((current) => {
       const next = new Set(current);
@@ -207,12 +220,12 @@ export function SyncView({
             {syncMode === "quick" ? (
               <>
                 <span className="mode-tag">最快完成</span>
-                直接复制或创建软链接到目标 Agent，不使用中心库
+                直接复制或创建软链接到目标 Agent，不使用中心库。有冲突的内容会在预览中被拦住，不会直接覆盖。
               </>
             ) : (
               <>
                 <span className="mode-tag">长期管理</span>
-                先复制到中心库，再用软链接分发到目标 Agent
+                先复制到中心库，再用软链接分发到目标 Agent。有冲突的内容会在预览中被拦住，不会直接覆盖。
               </>
             )}
           </div>
@@ -221,6 +234,7 @@ export function SyncView({
         <div className="sync-work-grid">
           <section className="sync-form-pane">
             <SyncSection
+              number="1"
               title="已选 Skill"
               action={(
                 <button className="sync-section-icon-action" onClick={onGoSkills} title="选择 Skill" type="button">
@@ -277,7 +291,7 @@ export function SyncView({
             </SyncSection>
 
             {syncMode === "quick" ? (
-              <SyncSection title="同步方式">
+              <SyncSection number="2" title="同步方式">
                 <div className="option-grid two">
                   <button className={`choice-card ${quickMethod === "copy" ? "active" : ""}`} onClick={() => setQuickMethod("copy")} type="button">
                     <Copy size={20} />
@@ -296,7 +310,7 @@ export function SyncView({
                 </div>
               </SyncSection>
             ) : (
-              <SyncSection title="中心库副本">
+              <SyncSection number="2" title="中心库副本">
                 <div className="managed-library-card">
                   <Link2 size={20} />
                   <span>
@@ -309,6 +323,7 @@ export function SyncView({
             )}
 
             <SyncSection
+              number="3"
               title="目标 Agent（可多选）"
               action={(
                 <div className="target-add-wrap title-add" ref={targetMenuRef}>
@@ -352,7 +367,7 @@ export function SyncView({
               </div>
             </SyncSection>
 
-            <SyncSection title="生效范围">
+            <SyncSection number="4" title="生效范围">
               <div className="option-grid two">
                 <button className={`choice-card ${targetScope === "global" ? "active" : ""}`} onClick={() => setTargetScope("global")} type="button">
                   <Globe2 size={21} />
@@ -390,47 +405,15 @@ export function SyncView({
               <ShieldCheck size={24} />
             </div>
 
-            <div className={`confirm-summary ${blocked ? "blocked" : ""}`}>
-              {blocked ? <AlertTriangle size={22} /> : <Check size={22} />}
-              <div className="summary-body">
-                <strong>{confirmationText}</strong>
-                {stalePlan ? (
-                  <span className="summary-sub">设置已变化，请重新生成详细预览</span>
-                ) : !activePlan && selectedTargets.length > 0 && selectedSkillCount > 0 && (
-                  <span className="summary-sub">点击下方按钮生成详细预览</span>
-                )}
-              </div>
-            </div>
-
-            {selectedTargets.length > 0 && (
-              <div className="destinations-preview">
-                <div className="dest-label">将同步到这些位置</div>
-                <div className="dest-list">
-                  {selectedTargets.map((agent) => {
-                    const destPath = targetPathPreview(agent, targetScope, selectedProjectPath);
-                    const isSymlink = syncMode === "quick" && quickMethod === "symlink";
-                    return (
-                      <div className="dest-item" key={agent.id}>
-                        <AgentIcon agent={agent} />
-                        <div className="dest-text">
-                          <span className="dest-agent">{agent.label}</span>
-                          <span className="dest-scope">{targetScope === "project" ? "项目" : "全局"}</span>
-                          {destPath && (
-                            <code className="dest-path" title={destPath}>{compactPath(destPath)}</code>
-                          )}
-                        </div>
-                        <span className="dest-action" title={isSymlink ? "创建软链接" : syncMode === "managed" ? "软链接分发" : "完整复制"}>
-                          {isSymlink ? "软链接" : syncMode === "managed" ? "软链接" : "复制"}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="dest-hint">
-                  每个 Skill 会在以上目录下创建对应子文件夹{quickMethod === "symlink" && syncMode === "quick" ? "（软链接指向源文件）" : "（完整副本）"}。
+            {activePlan && (
+              <div className={`confirm-summary ${blocked ? "blocked" : ""}`}>
+                {blocked ? <AlertTriangle size={22} /> : <Check size={22} />}
+                <div className="summary-body">
+                  <strong>{confirmationText}</strong>
                 </div>
               </div>
             )}
+
 
             {summary && (
               <div className="sync-summary-grid" aria-label="同步摘要">
@@ -443,16 +426,6 @@ export function SyncView({
               </div>
             )}
 
-            <div className="confirm-note">
-              <span>
-                {syncMode === "managed"
-                  ? "先放进中心库统一管理，再通过软链接分发。"
-                  : quickMethod === "copy"
-                  ? "直接复制完整文件夹到目标 Agent。"
-                  : "在目标 Agent 里创建指向源 Skill 的软链接。"}
-              </span>
-              <span>有冲突的内容会在预览中被拦住，不会直接覆盖。</span>
-            </div>
 
             {activePlan && activePlan.preconditions.length > 0 && (
               <div className="precondition-note">
@@ -485,33 +458,43 @@ export function SyncView({
         </div>
 
         <div className="sync-action-bar">
-          {generatedPlan ? (
-            <div className="button-pair">
-              <button className="secondary-button large" disabled={actionDisabled} onClick={previewPlan}>
-                重新生成预览
-              </button>
-              <button className="primary-button large" disabled={!activePlan || blocked || busy} onClick={onApply}>
-                <CopyCheck size={16} />
-                执行同步计划
-              </button>
+          {bottomPreviewText && (
+            <div className="action-preview">
+              <span className="preview-label">操作预览</span>
+              <span className="preview-sep"> · </span>
+              {bottomPreviewText}
             </div>
-          ) : (
-            <button className="primary-button large" disabled={actionDisabled} onClick={previewPlan}>
-              {previewLabel}
-              <ArrowRight size={16} />
-            </button>
           )}
+          <div className={bottomPreviewText ? "" : "action-buttons-end"}>
+            {generatedPlan ? (
+              <div className="button-pair">
+                <button className="secondary-button large" disabled={actionDisabled} onClick={previewPlan}>
+                  重新生成预览
+                </button>
+                <button className="primary-button large" disabled={!activePlan || blocked || busy} onClick={onApply}>
+                  <CopyCheck size={16} />
+                  执行同步计划
+                </button>
+              </div>
+            ) : (
+              <button className="primary-button large" disabled={actionDisabled} onClick={previewPlan}>
+                {previewLabel}
+                <ArrowRight size={16} />
+              </button>
+            )}
+          </div>
         </div>
       </section>
     </div>
   );
 }
 
-function SyncSection({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+function SyncSection({ number, title, action, children }: { number?: string; title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section className="sync-section">
       <div className="sync-section-title">
         <div>
+          {number && <span className="sync-section-number">{number}</span>}
           <strong>{title}</strong>
           {action}
         </div>
@@ -570,4 +553,32 @@ function planSummarySentence(plan: SyncPlan, summary: ReturnType<typeof syncPlan
   if (summary.noop > 0) parts.push(`跳过 ${summary.noop} 项`);
   const action = parts.join("，") || "无需变更";
   return `${action}，可安全执行。`;
+}
+
+function getOperationPreview(
+  skillCount: number,
+  targetCount: number,
+  scope: "global" | "project",
+  isGenerated: boolean,
+  quickMethod: QuickMigrationMethod,
+  syncMode: SyncMode
+): string {
+  const dir = scope === "project" ? "项目目录" : "全局目录";
+
+  if (syncMode === "managed") {
+    return isGenerated
+      ? `导入中心库并用软链接分发 ${skillCount} 个 Skill 到 ${targetCount} 个 Agent 的${dir}`
+      : `导入中心库后，用软链接分发 ${skillCount} 个 Skill 到 ${targetCount} 个 Agent 的${dir}`;
+  }
+
+  if (quickMethod === "symlink") {
+    return isGenerated
+      ? `为 ${skillCount} 个 Skill 在 ${targetCount} 个 Agent 的${dir}创建软链接`
+      : `将为 ${skillCount} 个 Skill 在 ${targetCount} 个 Agent 的${dir}创建软链接`;
+  }
+
+  // quick + copy
+  return isGenerated
+    ? `复制 ${skillCount} 个 Skill 到 ${targetCount} 个 Agent 的${dir}`
+    : `将复制 ${skillCount} 个 Skill 到 ${targetCount} 个 Agent 的${dir}`;
 }

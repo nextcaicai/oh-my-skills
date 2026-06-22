@@ -38,11 +38,14 @@
   background: rgba(255, 255, 255, 0.72);
 }
 
-.choice-card.active,
-.selected-target-card.active {
+.choice-card.active {
   border-color: rgba(47, 111, 237, 0.66);
   background: rgba(255, 255, 255, 0.58);
   box-shadow: inset 0 0 0 1px rgba(47, 111, 237, 0.14);
+}
+
+.selected-target-card.active {
+  /* selection indicated by checkmark only; no blue border on card */
 }
 
 .choice-card.active strong,
@@ -319,8 +322,22 @@
 .sync-section-title > div {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
+}
+
+.sync-section-number {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  place-items: center;
+  border-radius: 5px;
+  background: rgba(24, 26, 29, 0.08);
+  color: rgba(23, 25, 28, 0.65);
+  flex-shrink: 0;
 }
 
 .sync-section-icon-action {
@@ -385,7 +402,7 @@
 
 .choice-card {
   width: 312px;
-  height: 52px;
+  height: 56px;
   justify-content: flex-start;
   padding: 8px 10px;
   text-align: left;
@@ -487,13 +504,12 @@
 .target-card-check {
   display: grid;
   flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   place-items: center;
-  border: 1px solid rgba(47, 111, 237, 0.28);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.72);
-  color: #2f6fed;
+  border-radius: 5px;
+  background: #2f6fed;
+  color: #fff;
 }
 
 .target-add-wrap {
@@ -594,29 +610,6 @@
   color: #9d2d24;
 }
 
-.confirm-note {
-  border-radius: 8px;
-  background: rgba(24, 26, 29, 0.05);
-}
-
-.confirm-note {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 4px 2px;
-  background: transparent;
-  color: rgba(23, 25, 28, 0.62);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.confirm-note strong {
-  display: none;
-}
-
-.confirm-note span {
-  color: rgba(23, 25, 28, 0.50);
-}
 
 /* Destination preview in sync confirm pane - makes "what happens where" obvious */
 .destinations-preview {
@@ -709,11 +702,34 @@
 .sync-action-bar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 12px;
   margin-top: 14px;
-  padding: 14px 10px 0;
+  padding: 10px 10px 0;
   border-top: 1px solid rgba(24, 26, 29, 0.08);
+}
+
+.action-preview {
+  font-size: 12px;
+  color: rgba(23, 25, 28, 0.68);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 58%;
+}
+
+.action-preview .preview-label {
+  font-size: 11px;
+  color: rgba(23, 25, 28, 0.48);
+}
+
+.action-preview .preview-sep {
+  color: rgba(23, 25, 28, 0.35);
+  font-size: 11px;
+}
+
+.action-buttons-end {
+  margin-left: auto;
 }
 
 .primary-button.large,
