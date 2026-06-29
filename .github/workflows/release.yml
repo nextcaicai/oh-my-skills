@@ -8,7 +8,20 @@ on:
 
 jobs:
   release:
-    runs-on: macos-latest
+    name: Release (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: --target aarch64-apple-darwin
+            artifact_name: oh-my-skills-dmg
+            artifact_path: src-tauri/target/release/bundle/dmg/*.dmg
+          - os: windows-latest
+            args: ""
+            artifact_name: oh-my-skills-windows-nsis
+            artifact_path: src-tauri/target/release/bundle/nsis/*setup.exe
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,17 +50,16 @@ jobs:
 
             ### Downloads
             - macOS (Apple Silicon): `Oh My Skills_*.dmg` in the assets below
+            - Windows 10/11 (x64): `Oh My Skills_*_x64-setup.exe` in the assets below
 
             For installation instructions and changelog, see the [README](https://github.com/nextcaicai/oh-my-skills#readme).
           releaseDraft: false
           prerelease: false
-          # Build for Apple Silicon (aarch64). Add more targets if needed.
-          args: --target aarch64-apple-darwin
+          args: ${{ matrix.args }}
 
-      - name: Upload DMG as artifact (backup)
+      - name: Upload installer artifact (backup)
         uses: actions/upload-artifact@v4
         with:
-          name: oh-my-skills-dmg
-          path: |
-            src-tauri/target/release/bundle/dmg/*.dmg
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
           if-no-files-found: warn

@@ -773,10 +773,15 @@ fn push_source(
 }
 
 fn find_binary(command: &str) -> Option<PathBuf> {
-    binary_search_dirs()
-        .into_iter()
-        .map(|path| path.join(command))
-        .find(|candidate| candidate.is_file())
+    for dir in binary_search_dirs() {
+        for name in binary_candidate_names(command) {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 fn binary_search_dirs() -> Vec<PathBuf> {
@@ -789,6 +794,7 @@ fn binary_search_dirs() -> Vec<PathBuf> {
         }
     }
 
+    #[cfg(not(windows))]
     for path in [
         "/opt/homebrew/bin",
         "/usr/local/bin",
@@ -807,7 +813,48 @@ fn binary_search_dirs() -> Vec<PathBuf> {
         push_unique_path(&mut dirs, &mut seen, expand_home(path));
     }
 
+    #[cfg(windows)]
+    {
+        for path in [
+            "~\\.local\\bin",
+            "~\\.cargo\\bin",
+            "~\\AppData\\Roaming\\npm",
+            "~\\AppData\\Local\\Microsoft\\WindowsApps",
+            "~\\AppData\\Local\\Programs\\Git\\cmd",
+            "~\\AppData\\Local\\Programs\\Git\\bin",
+        ] {
+            push_unique_path(&mut dirs, &mut seen, expand_home(path));
+        }
+        for var in [
+            "LOCALAPPDATA",
+            "APPDATA",
+            "ProgramFiles",
+            "ProgramFiles(x86)",
+        ] {
+            if let Some(value) = std::env::var_os(var) {
+                push_unique_path(&mut dirs, &mut seen, PathBuf::from(value));
+            }
+        }
+    }
+
     dirs
+}
+
+#[cfg(windows)]
+fn binary_candidate_names(command: &str) -> Vec<String> {
+    let path = Path::new(command);
+    if path.extension().is_some() {
+        return vec![command.to_string()];
+    }
+    ["", ".exe", ".cmd", ".bat", ".ps1"]
+        .into_iter()
+        .map(|suffix| format!("{command}{suffix}"))
+        .collect()
+}
+
+#[cfg(not(windows))]
+fn binary_candidate_names(command: &str) -> Vec<String> {
+    vec![command.to_string()]
 }
 
 fn app_names_for_detection(definition: &AgentDefinition) -> Vec<String> {
@@ -815,10 +862,7 @@ fn app_names_for_detection(definition: &AgentDefinition) -> Vec<String> {
     let mut seen = BTreeSet::new();
 
     for app_path in &definition.app_paths {
-        if let Some(name) = Path::new(app_path)
-            .file_name()
-            .and_then(|name| name.to_str())
-        {
+        if let Some(name) = file_name_from_config_path(app_path) {
             push_unique_name(&mut names, &mut seen, normalize_app_name(name));
         }
     }
@@ -830,11 +874,29 @@ fn app_names_for_detection(definition: &AgentDefinition) -> Vec<String> {
     names
 }
 
+fn file_name_from_config_path(path: &str) -> Option<&str> {
+    path.rsplit(['/', '\\']).find(|segment| !segment.is_empty())
+}
+
+#[cfg(not(windows))]
 fn normalize_app_name(name: &str) -> String {
     if name.to_ascii_lowercase().ends_with(".app") {
         name.to_string()
     } else {
         format!("{name}.app")
+    }
+}
+
+#[cfg(windows)]
+fn normalize_app_name(name: &str) -> String {
+    let trimmed = name
+        .strip_suffix(".app")
+        .or_else(|| name.strip_suffix(".APP"))
+        .unwrap_or(name);
+    if trimmed.to_ascii_lowercase().ends_with(".exe") {
+        trimmed.to_string()
+    } else {
+        format!("{trimmed}.exe")
     }
 }
 
@@ -853,14 +915,17 @@ fn find_app_bundle(app_name: &str) -> Option<PathBuf> {
 
         for entry in entries.filter_map(Result::ok) {
             let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
             let Some(name) = entry.file_name().to_str().map(|name| name.to_string()) else {
                 continue;
             };
             if name.eq_ignore_ascii_case(&expected) {
                 return Some(path);
+            }
+            if path.is_dir() {
+                let nested = path.join(&expected);
+                if nested.is_file() {
+                    return Some(nested);
+                }
             }
         }
     }
@@ -872,6 +937,7 @@ fn app_search_roots() -> Vec<PathBuf> {
     let mut roots = Vec::new();
     let mut seen = BTreeSet::new();
 
+    #[cfg(not(windows))]
     for path in [
         "/Applications",
         "~/Applications",
@@ -879,6 +945,29 @@ fn app_search_roots() -> Vec<PathBuf> {
         "/Applications/Utilities",
     ] {
         push_unique_path(&mut roots, &mut seen, expand_home(path));
+    }
+
+    #[cfg(windows)]
+    {
+        for path in [
+            "~\\AppData\\Local\\Programs",
+            "~\\AppData\\Local",
+            "~\\AppData\\Roaming",
+        ] {
+            push_unique_path(&mut roots, &mut seen, expand_home(path));
+        }
+        for var in [
+            "LOCALAPPDATA",
+            "APPDATA",
+            "ProgramFiles",
+            "ProgramFiles(x86)",
+        ] {
+            if let Some(value) = std::env::var_os(var) {
+                let path = PathBuf::from(value);
+                push_unique_path(&mut roots, &mut seen, path.clone());
+                push_unique_path(&mut roots, &mut seen, path.join("Programs"));
+            }
+        }
     }
 
     roots
@@ -1099,9 +1188,19 @@ fn push_unique_name(names: &mut Vec<String>, seen: &mut BTreeSet<String>, name: 
 }
 
 fn push_unique_path(paths: &mut Vec<PathBuf>, seen: &mut BTreeSet<String>, path: PathBuf) {
-    if seen.insert(path_to_string(&path)) {
+    if seen.insert(path_identity(&path)) {
         paths.push(path);
     }
+}
+
+#[cfg(windows)]
+fn path_identity(path: &Path) -> String {
+    path_to_string(path).replace('\\', "/").to_ascii_lowercase()
+}
+
+#[cfg(not(windows))]
+fn path_identity(path: &Path) -> String {
+    path_to_string(path)
 }
 
 fn has_entries(path: &Path) -> bool {

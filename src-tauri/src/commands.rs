@@ -81,17 +81,8 @@ pub fn open_path(path: String) -> Result<(), String> {
             fs_ops::path_to_string(&path)
         ));
     }
-    let status = Command::new("open")
-        .arg(&path)
-        .status()
-        .map_err(|error| format!("Unable to open {}: {error}", fs_ops::path_to_string(&path)))?;
-    if !status.success() {
-        return Err(format!(
-            "Unable to open {}: open exited with {status}",
-            fs_ops::path_to_string(&path)
-        ));
-    }
-    Ok(())
+    tauri_plugin_opener::open_path(&path, None::<&str>)
+        .map_err(|error| format!("Unable to open {}: {error}", fs_ops::path_to_string(&path)))
 }
 
 #[tauri::command]
@@ -99,14 +90,8 @@ pub fn open_url(url: String) -> Result<(), String> {
     if !url.starts_with("https://github.com/") {
         return Err("Only GitHub URLs can be opened from this view".to_string());
     }
-    let status = Command::new("open")
-        .arg(&url)
-        .status()
-        .map_err(|error| format!("Unable to open {url}: {error}"))?;
-    if !status.success() {
-        return Err(format!("Unable to open {url}: open exited with {status}"));
-    }
-    Ok(())
+    tauri_plugin_opener::open_url(&url, None::<&str>)
+        .map_err(|error| format!("Unable to open {url}: {error}"))
 }
 
 #[tauri::command]

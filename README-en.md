@@ -1,7 +1,7 @@
 <div align="center">
   <img src="oms_logo.svg" alt="Oh My Skills" width="120" />
   <h1>Oh My Skills</h1>
-  <p><b>macOS-first desktop workbench for Agent Skills</b></p>
+  <p><b>Cross-platform desktop workbench for Agent Skills</b></p>
 </div>
 
 **Oh My Skills** is a local workbench to discover, compare, adopt, and safely sync Agent Skills across AI coding tools such as Claude Code, Cursor, Windsurf, Zed, Codex, and many others.
@@ -27,7 +27,7 @@ All filesystem mutations go through a strict **Preview → Confirm → Apply** f
   - Multiple strategies: copy, symlink, quick migration
 - **Safety First** — Every write operation generates a detailed Sync Plan with backup and conflict detection
 - **Health Checks** — Automatically detects broken symlinks, orphaned directories, content conflicts, and invalid SKILL.md files
-- **Native macOS Experience** — Built with Tauri + macOS Private APIs (transparent windows, popover effects)
+- **Cross-platform Desktop Experience** — Built with Tauri; macOS uses popover glass and Windows 10/11 uses acrylic transparency
 - **Broad Tool Support** — 20+ agents including Claude Code, Cursor, Windsurf, Zed, Codex, Cline, Gemini CLI, OpenCode, TRAE, etc.
 
 ## Supported Agents (partial)
@@ -38,7 +38,7 @@ See the app for the full live detection list.
 
 ## Installation
 
-### macOS (Recommended)
+### macOS
 
 1. Download the latest `Oh My Skills_*.dmg` from GitHub Releases
 2. Open the DMG and drag the app to your Applications folder
@@ -46,13 +46,21 @@ See the app for the full live detection list.
 
 > This is an early MVP release (v0.1.0). Signed + notarized builds and auto-update will be added in future releases.
 
+### Windows 10/11
+
+1. Download the latest `Oh My Skills_*_x64-setup.exe` from GitHub Releases
+2. Run the installer and follow the prompts
+3. To use symlink sync, enable Windows Developer Mode or run Oh My Skills as administrator; otherwise choose Copy in quick migration
+
+> Windows builds use NSIS and install/update the WebView2 Runtime through the bootstrapper when needed.
+
 ### Build from Source
 
 **Prerequisites**
 
 - Node.js ≥ 18
 - Rust (via rustup recommended)
-- macOS (primary target for now)
+- macOS or Windows 10/11
 
 ```bash
 git clone https://github.com/your-username/oh-my-skills.git
@@ -61,10 +69,17 @@ npm install
 npm run tauri:dev
 ```
 
-Build a production release (produces both `.app` and `.dmg`):
+Build a production release:
 
 ```bash
 npm run tauri:build
+```
+
+You can also build an explicit platform bundle:
+
+```bash
+npm run tauri:build:macos
+npm run tauri:build:windows
 ```
 
 Output locations:
@@ -72,6 +87,7 @@ Output locations:
 ```
 src-tauri/target/release/bundle/dmg/Oh My Skills_0.1.0_aarch64.dmg
 src-tauri/target/release/bundle/macos/Oh My Skills.app
+src-tauri/target/release/bundle/nsis/Oh My Skills_0.1.0_x64-setup.exe
 ```
 
 ## Workflow
@@ -113,14 +129,14 @@ Project layout:
 npm run tauri:build
 ```
 
-The resulting DMG can be distributed directly.
+The resulting macOS DMG or Windows `*-setup.exe` can be distributed directly.
 
-### Automated Releases (Planned)
+### Automated Releases
 
 A basic CI workflow (`.github/workflows/ci.yml`) is already included:
 
-- Runs frontend build + Rust tests on every push / PR to `main`
-- A full release workflow will be added later: pushing a version tag will automatically build the DMG on GitHub-hosted runners and attach it to GitHub Releases
+- Runs frontend build + Rust tests on macOS and Windows for every push / PR to `main`
+- Pushing a version tag automatically builds the macOS DMG and Windows NSIS installer and attaches them to GitHub Releases
 
 This lets users download ready-to-run binaries without setting up Rust locally.
 
@@ -128,9 +144,9 @@ This lets users download ready-to-run binaries without setting up Rust locally.
 
 Tauri desktop apps require a full system toolchain (Rust, Node, platform SDKs). Moving builds to GitHub Actions provides several major benefits:
 
-- Users can **download pre-built DMGs** directly instead of cloning + installing Rust + running `tauri build`
+- Users can **download pre-built installers** directly instead of cloning + installing Rust + running `tauri build`
 - Builds are reproducible and happen in a clean CI environment
-- Easy to expand to Windows and Linux later
+- Keeps macOS and Windows release artifacts reproducible
 - Enables GitHub Releases + future auto-update support
 - CI can also enforce tests, type checking, and linting on every PR
 
@@ -141,7 +157,7 @@ The official Tauri team recommends the `tauri-apps/tauri-action` for this exact 
 - **Frontend**: React 18 + TypeScript + Vite + Lucide React
 - **Desktop**: Tauri v2 (Rust)
 - **Core Logic**: Rust (walkdir, serde, custom sync planner)
-- **UI Philosophy**: Quiet, high-density, native macOS tool feel (inspired by Raycast-style efficiency tools)
+- **UI Philosophy**: Quiet, high-density desktop tool feel (inspired by Raycast-style efficiency tools)
 
 ## Status
 
@@ -149,12 +165,12 @@ MVP (v0.1.0). Core functionality is working:
 
 - Agent + Skills discovery
 - Central library + safe preview/apply sync
-- Native macOS interface
+- Native-feeling macOS and Windows desktop interface
 
 Roadmap ideas:
 - Better update detection and conflict resolution
 - GitHub-based skill sources
-- Multi-platform CI builds + auto-update
+- Auto-update and additional platform packaging
 - More agent adapters and project workspace UX improvements
 
 ## Screenshots

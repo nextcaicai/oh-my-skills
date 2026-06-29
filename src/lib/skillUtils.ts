@@ -108,7 +108,7 @@ export function skillSourceSummary(skill: SkillRecord, skillLocks: Record<string
     };
   }
 
-  const gitInstallation = skill.installations.find((installation) => installation.entryPath.includes("/.git/") || installation.rootPath.includes("/.git/"));
+  const gitInstallation = skill.installations.find((installation) => normalizedPath(installation.entryPath).includes("/.git/") || normalizedPath(installation.rootPath).includes("/.git/"));
   if (gitInstallation) {
     const detail = compactPath(gitInstallation.entryPath);
     return {
@@ -141,10 +141,10 @@ function skillsShLock(skill: SkillRecord, skillLocks: Record<string, SkillLockEn
   return skillLocks[skill.slug] ?? skillLocks[skill.displayName];
 }
 
-const AGENTS_SKILL_PATH_REGEX = /\/\.agents\/skills\/[^/]+$/;
+const AGENTS_SKILL_PATH_REGEX = /(?:^|\/)\.agents\/skills\/[^/]+$/;
 
 function isAgentsSkillPath(path: string) {
-  return AGENTS_SKILL_PATH_REGEX.test(path);
+  return AGENTS_SKILL_PATH_REGEX.test(normalizedPath(path));
 }
 
 export function failedUpdateCheck(reason: unknown): SkillUpdateCheck {
@@ -152,13 +152,14 @@ export function failedUpdateCheck(reason: unknown): SkillUpdateCheck {
 }
 
 function pluginSourceDetail(path: string) {
-  const claudeMarketplace = path.match(/\/\.claude\/plugins\/marketplaces\/([^/]+)/);
+  const cleanPath = normalizedPath(path);
+  const claudeMarketplace = cleanPath.match(/\/\.claude\/plugins\/marketplaces\/([^/]+)/);
   if (claudeMarketplace) return marketplaceRepositoryLabel(claudeMarketplace[1]);
 
-  const cursorMarketplace = path.match(/\/\.cursor\/plugins\/marketplaces\/([^/]+)/);
+  const cursorMarketplace = cleanPath.match(/\/\.cursor\/plugins\/marketplaces\/([^/]+)/);
   if (cursorMarketplace) return marketplaceRepositoryLabel(cursorMarketplace[1]);
 
-  const codexPlugin = path.match(/\/\.codex\/plugins\/cache\/([^/]+)\/([^/]+)/);
+  const codexPlugin = cleanPath.match(/\/\.codex\/plugins\/cache\/([^/]+)\/([^/]+)/);
   if (codexPlugin) return codexPluginRepositoryLabel(codexPlugin[1], codexPlugin[2]);
 
   return null;
@@ -205,11 +206,14 @@ function githubUrlFromDetail(detail: string) {
 }
 
 export function compactPath(path: string) {
-  return path.replace(/^\/Users\/[^/]+/, "~");
+  const cleanPath = normalizedPath(path);
+  return cleanPath
+    .replace(/^\/Users\/[^/]+/, "~")
+    .replace(/^[A-Za-z]:\/Users\/[^/]+/, "~");
 }
 
 export function samePath(left: string, right: string) {
-  return left.replace(/\/+$/, "") === right.replace(/\/+$/, "");
+  return pathIdentity(left) === pathIdentity(right);
 }
 
 export function projectSkillsForFolder(skills: SkillRecord[], folder: string | null): SkillRecord[] {
@@ -230,7 +234,7 @@ export function projectSkillsForFolder(skills: SkillRecord[], folder: string | n
 }
 
 export function projectName(folder: string) {
-  const clean = folder.replace(/\/+$/, "");
+  const clean = normalizedPath(folder).replace(/\/+$/, "");
   return clean.split("/").pop() || clean;
 }
 
@@ -246,9 +250,18 @@ export function projectStats(folder: string, skills: SkillRecord[]) {
 }
 
 function isPathInFolder(path: string, folder: string) {
-  const normalizedPath = path.replace(/\/+$/, "");
-  const normalizedFolder = folder.replace(/\/+$/, "");
-  return normalizedPath === normalizedFolder || normalizedPath.startsWith(`${normalizedFolder}/`);
+  const child = pathIdentity(path);
+  const parent = pathIdentity(folder);
+  return child === parent || child.startsWith(`${parent}/`);
+}
+
+function normalizedPath(path: string) {
+  return path.replace(/\\/g, "/");
+}
+
+function pathIdentity(path: string) {
+  const cleanPath = normalizedPath(path).replace(/\/+$/, "");
+  return /^[a-z]:\//i.test(cleanPath) ? cleanPath.toLowerCase() : cleanPath;
 }
 
 export function agentSkillCount(agentId: string, skills: SkillRecord[]) {

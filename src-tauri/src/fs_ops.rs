@@ -15,12 +15,23 @@ pub fn expand_home(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
         return home_dir().join(rest);
     }
+    if let Some(rest) = path.strip_prefix("~\\") {
+        return home_dir().join(rest);
+    }
     PathBuf::from(path)
 }
 
 pub fn home_dir() -> PathBuf {
     std::env::var_os("HOME")
         .map(PathBuf::from)
+        .or_else(|| std::env::var_os("USERPROFILE").map(PathBuf::from))
+        .or_else(|| {
+            let drive = std::env::var_os("HOMEDRIVE")?;
+            let path = std::env::var_os("HOMEPATH")?;
+            let mut home = PathBuf::from(drive);
+            home.push(path);
+            Some(home)
+        })
         .unwrap_or_else(|| PathBuf::from("/"))
 }
 
@@ -55,7 +66,7 @@ pub fn hash_dir(path: &Path) -> Result<String, String> {
         let rel = file
             .strip_prefix(path)
             .map_err(|error| format!("Unable to hash {}: {error}", path_to_string(&file)))?;
-        hasher.update(rel.to_string_lossy().as_bytes());
+        hasher.update(hash_relative_path(rel).as_bytes());
         hasher.update([0]);
 
         let mut handle = fs::File::open(&file)
@@ -74,6 +85,13 @@ pub fn hash_dir(path: &Path) -> Result<String, String> {
     }
 
     Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn hash_relative_path(path: &Path) -> String {
+    path.components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 pub fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<(), String> {
@@ -167,9 +185,59 @@ pub fn create_symlink(source: &Path, destination: &Path) -> Result<(), String> {
     })
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+pub fn create_symlink(source: &Path, destination: &Path) -> Result<(), String> {
+    if let Some(parent) = destination.parent() {
+        ensure_dir(parent)?;
+    }
+    let result = if source.is_dir() {
+        std::os::windows::fs::symlink_dir(source, destination)
+    } else {
+        std::os::windows::fs::symlink_file(source, destination)
+    };
+    result.map_err(|error| {
+        format!(
+            "Unable to symlink {} to {}: {error}. On Windows, enable Developer Mode or run Oh My Skills as administrator, or use Copy instead.",
+            path_to_string(destination),
+            path_to_string(source)
+        )
+    })
+}
+
+#[cfg(not(any(unix, windows)))]
 pub fn create_symlink(_source: &Path, _destination: &Path) -> Result<(), String> {
-    Err("Symlink sync is only implemented for Unix-like systems in this MVP".to_string())
+    Err("Symlink sync is not implemented for this operating system".to_string())
+}
+
+#[cfg(windows)]
+pub fn symlink_unavailable_message() -> Option<String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    let probe_root = std::env::temp_dir().join(format!("oh-my-skills-symlink-probe-{suffix}"));
+    let source = probe_root.join("source");
+    let link = probe_root.join("link");
+
+    let result = (|| -> Result<(), String> {
+        ensure_dir(&source)?;
+        std::os::windows::fs::symlink_dir(&source, &link).map_err(|error| {
+            format!(
+                "Symlink sync is unavailable on this Windows machine: {error}. Enable Windows Developer Mode or run Oh My Skills as administrator, then preview again. You can use Copy migration instead."
+            )
+        })?;
+        Ok(())
+    })();
+
+    let _ = fs::remove_dir_all(&probe_root);
+    result.err()
+}
+
+#[cfg(not(windows))]
+pub fn symlink_unavailable_message() -> Option<String> {
+    None
 }
 
 #[cfg(test)]
@@ -185,5 +253,32 @@ mod tests {
         fs::write(temp.path().join("SKILL.md"), "two").expect("write two");
         let second = hash_dir(temp.path()).expect("second hash");
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn expands_backslash_home_prefix() {
+        let expected = home_dir().join("skills");
+        assert_eq!(expand_home("~\\skills"), expected);
+    }
+
+    #[test]
+    fn hash_paths_use_forward_slashes() {
+        let path = PathBuf::from("one").join("two").join("SKILL.md");
+        assert_eq!(hash_relative_path(&path), "one/two/SKILL.md");
+    }
+
+    #[test]
+    fn removes_files_and_directories() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let file = temp.path().join("file.txt");
+        let dir = temp.path().join("dir");
+        fs::write(&file, "data").expect("write file");
+        fs::create_dir_all(&dir).expect("create dir");
+
+        remove_entry(&file).expect("remove file");
+        remove_entry(&dir).expect("remove dir");
+
+        assert!(!file.exists());
+        assert!(!dir.exists());
     }
 }

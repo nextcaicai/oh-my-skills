@@ -10,7 +10,6 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "Oh My Skills",
@@ -19,11 +18,7 @@
         "minWidth": 1040,
         "minHeight": 680,
         "transparent": true,
-        "backgroundColor": "#00000000",
-        "windowEffects": {
-          "effects": ["popover"],
-          "state": "active"
-        }
+        "backgroundColor": "#00000000"
       }
     ],
     "security": {

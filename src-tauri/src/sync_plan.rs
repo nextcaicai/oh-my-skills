@@ -1,6 +1,6 @@
 use crate::fs_ops::{
     copy_dir_recursive, create_symlink, ensure_dir, hash_dir, move_path, path_to_string,
-    remove_entry,
+    remove_entry, symlink_unavailable_message,
 };
 use crate::models::{
     AgentTarget, ApplyResult, InstallationRef, ScanOptions, SyncOperation, SyncPlan,
@@ -474,6 +474,13 @@ fn append_quick_migration_operations(
     blocked_conflicts: &mut Vec<String>,
     preconditions: &mut Vec<String>,
 ) {
+    if method == "symlink" {
+        if let Some(message) = symlink_unavailable_message() {
+            push_blocked_conflict_once(blocked_conflicts, message);
+            return;
+        }
+    }
+
     let installed_agent_ids = detect_agents(settings, false)
         .into_iter()
         .filter(|agent| agent.installed)
@@ -570,6 +577,11 @@ fn append_sync_operations(
     blocked_conflicts: &mut Vec<String>,
     preconditions: &mut Vec<String>,
 ) {
+    if let Some(message) = symlink_unavailable_message() {
+        push_blocked_conflict_once(blocked_conflicts, message);
+        return;
+    }
+
     let installed_agent_ids = detect_agents(&settings, false)
         .into_iter()
         .filter(|agent| agent.installed)
@@ -634,6 +646,15 @@ fn append_sync_operations(
                 blocked_conflicts,
             );
         }
+    }
+}
+
+fn push_blocked_conflict_once(blocked_conflicts: &mut Vec<String>, message: String) {
+    if !blocked_conflicts
+        .iter()
+        .any(|existing| existing == &message)
+    {
+        blocked_conflicts.push(message);
     }
 }
 

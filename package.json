@@ -20,6 +20,8 @@
     "tauri:dev": "tauri dev",
     "tauri:dev:hmr": "tauri dev --config src-tauri/tauri.hmr.conf.json",
     "tauri:build": "tauri build",
+    "tauri:build:macos": "tauri build --config src-tauri/tauri.macos.conf.json",
+    "tauri:build:windows": "tauri build --config src-tauri/tauri.windows.conf.json",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "smoke": "npm run build && npm run test:rust"
   },
