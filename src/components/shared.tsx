@@ -75,6 +75,6 @@ export function issueActionHint(issue: SkillIssue) {
   if (issue.code === "broken-symlink") return "建议修复断开的软链接后再同步。";
   if (issue.code === "content-conflict") return "建议先选择一个规范来源，避免覆盖不同内容。";
   if (issue.code === "missing-skill-md") return "建议确认目录是否为有效 Skill。";
-  if (issue.code === "name-mismatch") return "建议统一目录名和 frontmatter name。";
+  if (issue.code === "name-mismatch") return "这不是内容冲突；目录名用于路径和同步识别，frontmatter name 用于展示，长期建议统一。";
   return issue.path ? `位置：${issue.path}` : "建议先检查这个 Skill 的来源和安装状态。";
 }

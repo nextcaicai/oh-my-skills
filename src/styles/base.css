@@ -69,8 +69,8 @@ p {
   flex-direction: column;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(246, 247, 248, 0.26)),
-    rgba(235, 237, 238, 0.28);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(246, 247, 248, 0.18)),
+    #eef0f2;
   color: var(--app-text);
 }
 

@@ -12,7 +12,7 @@
         "transparent": true,
         "titleBarStyle": "Transparent",
         "hiddenTitle": true,
-        "backgroundColor": "#EEEFF0",
+        "backgroundColor": "#F3F4F5",
         "windowEffects": {
           "effects": ["popover"],
           "state": "active"

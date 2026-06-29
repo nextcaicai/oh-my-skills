@@ -423,11 +423,11 @@ pub fn inspect_installation(
             Ok(text) => {
                 let (parsed, _) = parse_skill_markdown(&text);
                 if let Some(parsed) = parsed {
-                    if parsed.name.as_deref().is_some_and(|name| name != slug) {
+                    if let Some(name) = parsed.name.as_deref().filter(|name| *name != slug) {
                         issues.push(issue(
                             "name-mismatch",
                             "warning",
-                            "Frontmatter name does not match the folder name",
+                            &name_mismatch_message(&slug, name),
                             Some(entry_path),
                             Some(agent_id),
                         ));
@@ -492,6 +492,18 @@ pub fn parse_skill_markdown(text: &str) -> (Option<SkillFrontmatter>, String) {
         .to_string();
 
     (Some(parse_frontmatter(raw)), body)
+}
+
+fn name_mismatch_message(folder_name: &str, frontmatter_name: &str) -> String {
+    if folder_name.eq_ignore_ascii_case(frontmatter_name) {
+        format!(
+            "Directory name differs only by case from frontmatter name (directory: {folder_name}, frontmatter name: {frontmatter_name})"
+        )
+    } else {
+        format!(
+            "Directory name and frontmatter name differ (directory: {folder_name}, frontmatter name: {frontmatter_name})"
+        )
+    }
 }
 
 fn parse_frontmatter(raw: &str) -> SkillFrontmatter {
@@ -682,10 +694,36 @@ mod tests {
 
         let installation =
             inspect_installation("test", "Test", "global", temp.path(), &skill, temp.path());
-        assert!(installation
+        let issue = installation
             .issues
             .iter()
-            .any(|issue| issue.code == "name-mismatch"));
+            .find(|issue| issue.code == "name-mismatch")
+            .expect("name mismatch issue");
+        assert!(issue.message.contains("directory: folder-name"));
+        assert!(issue.message.contains("frontmatter name: other-name"));
+    }
+
+    #[test]
+    fn explains_case_only_name_mismatch() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let skill = temp.path().join("presentations");
+        fs::create_dir_all(&skill).expect("skill dir");
+        fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: Presentations\ndescription: Test\n---\nBody",
+        )
+        .expect("skill md");
+
+        let installation =
+            inspect_installation("test", "Test", "global", temp.path(), &skill, temp.path());
+        let issue = installation
+            .issues
+            .iter()
+            .find(|issue| issue.code == "name-mismatch")
+            .expect("name mismatch issue");
+        assert!(issue.message.contains("differs only by case"));
+        assert!(issue.message.contains("directory: presentations"));
+        assert!(issue.message.contains("frontmatter name: Presentations"));
     }
 
     #[test]
