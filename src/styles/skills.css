@@ -680,7 +680,13 @@
   overflow-x: hidden;
   overflow-y: auto;
   padding: 0 var(--skill-list-right-gutter) 0 var(--skill-list-left-gutter);
+  scroll-padding-bottom: 0;
   scrollbar-gutter: stable;
+}
+
+.skill-list-board.has-selection-bar .skill-list {
+  padding-bottom: 112px;
+  scroll-padding-bottom: 112px;
 }
 
 .skill-row {

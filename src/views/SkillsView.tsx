@@ -373,7 +373,7 @@ export function SkillsView({
         )}
 
         {!isProjectNoWorkspace && (
-          <div className="skill-list-board">
+          <div className={`skill-list-board ${selectedCount > 0 ? "has-selection-bar" : ""}`}>
             <div className="skill-table-head">
               <span />
               <span>Skill</span>
