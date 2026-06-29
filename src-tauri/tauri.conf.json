@@ -17,7 +17,7 @@
         "height": 720,
         "minWidth": 1040,
         "minHeight": 680,
-        "transparent": true,
+        "transparent": false,
         "titleBarStyle": "Transparent",
         "hiddenTitle": true,
         "backgroundColor": "#F3F4F5"

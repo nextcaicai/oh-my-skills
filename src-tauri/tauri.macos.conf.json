@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "app": {
-    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "Oh My Skills",
@@ -9,14 +8,10 @@
         "height": 720,
         "minWidth": 1040,
         "minHeight": 680,
-        "transparent": true,
+        "transparent": false,
         "titleBarStyle": "Transparent",
         "hiddenTitle": true,
-        "backgroundColor": "#F3F4F5",
-        "windowEffects": {
-          "effects": ["popover"],
-          "state": "active"
-        }
+        "backgroundColor": "#F3F4F5"
       }
     ]
   },

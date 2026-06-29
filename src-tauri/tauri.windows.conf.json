@@ -8,12 +8,8 @@
         "height": 720,
         "minWidth": 1040,
         "minHeight": 680,
-        "transparent": true,
-        "backgroundColor": "#00000000",
-        "windowEffects": {
-          "effects": ["acrylic"],
-          "state": "active"
-        }
+        "transparent": false,
+        "backgroundColor": "#F3F4F5"
       }
     ]
   },
