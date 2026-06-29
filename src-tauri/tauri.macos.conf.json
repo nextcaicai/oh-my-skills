@@ -5,8 +5,8 @@
     "windows": [
       {
         "title": "Oh My Skills",
-        "width": 1280,
-        "height": 820,
+        "width": 1080,
+        "height": 720,
         "minWidth": 1040,
         "minHeight": 680,
         "transparent": true,
