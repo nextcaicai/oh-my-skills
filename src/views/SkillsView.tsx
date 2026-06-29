@@ -141,11 +141,8 @@ export function SkillsView({
     ? "全部 Agent"
     : agents.find((agent) => agent.id === agentFilter)?.label ?? "全部 Agent";
   const isProjectWorkspace = workspace === "project";
-  const tabSummary = isProjectWorkspace
-    ? selectedProjectFolder
-      ? `管理 ${projectName(selectedProjectFolder)} 内生效的 Agent Skills，已发现 ${sourceSkills.length} 个。`
-      : "关联一个项目工作区后，可以管理该项目内各 Agent 生效的 Skills。"
-    : `管理这台机器上各 Agent 的全局 Skills，已发现 ${sourceSkills.length} 个。`;
+  const isLibraryWorkspace = workspace === "library";
+  const tabSummary = workspaceSummary(workspace, sourceSkills.length, selectedProjectFolder);
   const hasProjectWorkspaces = projectFolders.length > 0;
   const isProjectNoWorkspace = isProjectWorkspace && !hasProjectWorkspaces;
   const isFiltered = Boolean(query.trim()) || agentFilter !== "all";
@@ -155,14 +152,18 @@ export function SkillsView({
       ? hasProjectWorkspaces
         ? "这个项目还没有项目级 Skills"
         : "尚未关联项目工作区"
-      : "还没有全局 Skills";
+      : isLibraryWorkspace
+        ? "中心库还没有 Skills"
+        : "还没有全局 Skills";
   const emptyBody = isFiltered
     ? "换个关键词试试"
     : isProjectWorkspace
       ? hasProjectWorkspaces
         ? "可以从中心库同步到当前项目，或创建某个 Agent 的项目 skills 目录。"
         : "选择一个项目根目录后，Oh My Skills 会自动检测该项目下各 Agent 的项目级 Skills。"
-      : "重新扫描或从中心库同步到某个 Agent 后，这里会显示机器级生效的 Skills。";
+      : isLibraryWorkspace
+        ? "从全局或项目工作区选择 Skill 导入中心库后，这里会显示可统一分发的规范副本。"
+        : "重新扫描或从中心库同步到某个 Agent 后，这里会显示机器级生效的 Skills。";
   const selectedSkills = selectedSkillsInOrder(selectedSkillIds, allSkills);
   const selectedCount = selectedSkills.length;
   const recentSelectedSkills = selectedSkills.slice(-2);
@@ -173,7 +174,7 @@ export function SkillsView({
       <section className="skills-workbench">
         <div className="skills-toolbar">
           <div className="scope-tabs workspace-tabs" role="tablist" aria-label="Skills 工作区">
-            {(["global", "project"] as SkillWorkspace[]).map((scope) => (
+            {(["global", "project", "library"] as SkillWorkspace[]).map((scope) => (
               <button
                 className={workspace === scope ? "active" : ""}
                 key={scope}
@@ -182,7 +183,7 @@ export function SkillsView({
                 type="button"
                 aria-selected={workspace === scope}
               >
-                {scope === "global" ? "全局工作区" : "项目工作区"}
+                {workspaceLabel(scope)}
               </button>
             ))}
           </div>
@@ -446,7 +447,7 @@ export function SkillsView({
           </div>
           <div className="selection-actions">
             <button className="secondary-button large" onClick={onAdoptSelected} type="button">
-              导入中心库 {selectedCount} 个
+              {isLibraryWorkspace ? "从中心库同步" : "导入中心库"} {selectedCount} 个
             </button>
             <button className="primary-button large" onClick={onQuickSyncSelected} type="button">
               快速同步 {selectedCount} 个
@@ -456,6 +457,26 @@ export function SkillsView({
       )}
     </div>
   );
+}
+
+function workspaceLabel(workspace: SkillWorkspace) {
+  if (workspace === "global") return "全局工作区";
+  if (workspace === "project") return "项目工作区";
+  return "中心库工作区";
+}
+
+function workspaceSummary(workspace: SkillWorkspace, skillCount: number, selectedProjectFolder: string | null) {
+  if (workspace === "project") {
+    return selectedProjectFolder
+      ? `管理 ${projectName(selectedProjectFolder)} 内生效的 Agent Skills，已发现 ${skillCount} 个。`
+      : "关联一个项目工作区后，可以管理该项目内各 Agent 生效的 Skills。";
+  }
+
+  if (workspace === "library") {
+    return `管理中心库里的规范 Skill 副本，已发现 ${skillCount} 个。`;
+  }
+
+  return `管理这台机器上各 Agent 的全局 Skills，已发现 ${skillCount} 个。`;
 }
 
 function SkillsListEmptyState({
@@ -473,7 +494,7 @@ function SkillsListEmptyState({
 }) {
   return (
     <section className="agent-empty-state" aria-label="Skills 列表空状态">
-      {isFiltered || workspace === "project" ? <ProjectEmptyVisual /> : <AgentEmptyVisual />}
+      {isFiltered || workspace !== "global" ? <ProjectEmptyVisual /> : <AgentEmptyVisual />}
       <div className="agent-empty-copy">
         <strong>{title}</strong>
         <span>{body}</span>

@@ -109,7 +109,16 @@ export default function App() {
     [allSkills, selectedProjectFolder]
   );
 
-  const visibleSourceSkills = skillWorkspace === "project" ? projectSkills : globalSkills;
+  const librarySkills = useMemo(
+    () => allSkills.filter((skill) => skill.canonicalStatus === "imported"),
+    [allSkills]
+  );
+
+  const visibleSourceSkills = skillWorkspace === "project"
+    ? projectSkills
+    : skillWorkspace === "library"
+      ? librarySkills
+      : globalSkills;
 
   const filteredSkills = useMemo(() => {
     const needle = query.trim().toLowerCase();
