@@ -6,6 +6,7 @@ use crate::models::{
 use crate::registry::{detect_agents, resolve_roots};
 use crate::settings::{app_data_dir, load_settings};
 use chrono::Utc;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -28,6 +29,7 @@ pub fn scan(app: &AppHandle, options: ScanOptions) -> Result<InventorySnapshot, 
 
     let mut keys: BTreeSet<SkillGroupKey> = canonical.keys().cloned().collect();
     keys.extend(grouped.keys().cloned());
+    let duplicated_slugs = duplicated_slugs(&keys);
 
     let mut skills = Vec::new();
     for key in keys {
@@ -91,7 +93,11 @@ pub fn scan(app: &AppHandle, options: ScanOptions) -> Result<InventorySnapshot, 
             });
 
         skills.push(SkillRecord {
-            id: slug.clone(),
+            id: if duplicated_slugs.contains(&slug) {
+                format!("{}@{}", slug, short_fingerprint(&key.identity))
+            } else {
+                slug.clone()
+            },
             slug,
             display_name,
             description,
@@ -304,12 +310,30 @@ fn scan_root(
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct SkillGroupKey {
     slug: String,
+    identity: String,
 }
 
-fn group_key(slug: &str, _installation: &SkillInstallation) -> SkillGroupKey {
+fn group_key(slug: &str, installation: &SkillInstallation) -> SkillGroupKey {
     SkillGroupKey {
         slug: slug.to_string(),
+        identity: installation.hash.clone().unwrap_or_else(|| {
+            installation
+                .real_path
+                .clone()
+                .unwrap_or_else(|| installation.entry_path.clone())
+        }),
     }
+}
+
+fn duplicated_slugs(keys: &BTreeSet<SkillGroupKey>) -> BTreeSet<String> {
+    let mut counts = BTreeMap::<String, usize>::new();
+    for key in keys {
+        *counts.entry(key.slug.clone()).or_default() += 1;
+    }
+    counts
+        .into_iter()
+        .filter_map(|(slug, count)| (count > 1).then_some(slug))
+        .collect()
 }
 
 fn dedupe_installations(installations: Vec<SkillInstallation>) -> Vec<SkillInstallation> {
@@ -317,6 +341,15 @@ fn dedupe_installations(installations: Vec<SkillInstallation>) -> Vec<SkillInsta
     installations
         .into_iter()
         .filter(|installation| seen.insert(installation.id.clone()))
+        .collect()
+}
+
+fn short_fingerprint(value: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(value.as_bytes());
+    format!("{:x}", hasher.finalize())
+        .chars()
+        .take(12)
         .collect()
 }
 
@@ -702,7 +735,7 @@ mod tests {
     }
 
     #[test]
-    fn groups_same_slug_from_different_paths() {
+    fn separates_same_slug_with_different_content() {
         let temp = tempfile::tempdir().expect("temp dir");
         let root_a = temp.path().join("agent-a-skills");
         let root_b = temp.path().join("agent-b-skills");
@@ -720,6 +753,52 @@ mod tests {
             "---\nname: frontend-design\ndescription: Local copy\n---\nBody B",
         )
         .expect("skill b md");
+
+        let root_a = ResolvedRoot {
+            agent_id: "claude".to_string(),
+            agent_label: "Claude Code".to_string(),
+            scope: "global".to_string(),
+            path: path_to_string(&root_a),
+            exists: true,
+            active: true,
+            orphaned: false,
+        };
+        let root_b = ResolvedRoot {
+            agent_id: "cursor".to_string(),
+            agent_label: "Cursor".to_string(),
+            scope: "global".to_string(),
+            path: path_to_string(&root_b),
+            exists: true,
+            active: true,
+            orphaned: false,
+        };
+        let mut grouped = BTreeMap::new();
+        let mut issues = Vec::new();
+
+        scan_root(&root_a, temp.path(), &mut grouped, &mut issues).expect("scan root a");
+        scan_root(&root_b, temp.path(), &mut grouped, &mut issues).expect("scan root b");
+
+        assert_eq!(
+            grouped
+                .keys()
+                .filter(|key| key.slug == "frontend-design")
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn groups_same_slug_with_same_content_from_different_paths() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let root_a = temp.path().join("agent-a-skills");
+        let root_b = temp.path().join("agent-b-skills");
+        let skill_a = root_a.join("frontend-design");
+        let skill_b = root_b.join("frontend-design");
+        let skill_md = "---\nname: frontend-design\ndescription: Shared copy\n---\nBody";
+        fs::create_dir_all(&skill_a).expect("skill a dir");
+        fs::create_dir_all(&skill_b).expect("skill b dir");
+        fs::write(skill_a.join("SKILL.md"), skill_md).expect("skill a md");
+        fs::write(skill_b.join("SKILL.md"), skill_md).expect("skill b md");
 
         let root_a = ResolvedRoot {
             agent_id: "claude".to_string(),

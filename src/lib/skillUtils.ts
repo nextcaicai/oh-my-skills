@@ -27,7 +27,11 @@ export function aggregateSkillsBySlug(skills: SkillRecord[]): SkillRecord[] {
   const grouped = new Map<string, SkillRecord[]>();
 
   for (const skill of skills) {
-    grouped.set(skill.slug, [...(grouped.get(skill.slug) ?? []), skill]);
+    for (const fragment of skillIdentityFragments(skill)) {
+      const identity = skillIdentity(fragment);
+      const key = `${fragment.slug}\u0000${identity}`;
+      grouped.set(key, [...(grouped.get(key) ?? []), fragment]);
+    }
   }
 
   return Array.from(grouped.values()).map((group) => {
@@ -48,17 +52,10 @@ export function aggregateSkillsBySlug(skills: SkillRecord[]): SkillRecord[] {
       ...group.flatMap((skill) => skill.missingAgents)
     ]);
     const conflict = group.some((skill) => skill.conflict) || hashes.size > 1;
-    if (conflict && !issues.some((issue) => issue.code === "content-conflict")) {
-      issues.push({
-        code: "content-conflict",
-        severity: "warning",
-        message: `Multiple content hashes found for skill '${primary.slug}'`
-      });
-    }
 
     return {
       ...primary,
-      id: primary.slug,
+      id: groupId(primary, skillIdentity(primary), group.length),
       displayName: primary.displayName,
       description: primary.description ?? group.find((skill) => skill.description)?.description,
       canonicalStatus: group.some((skill) => skill.canonicalStatus === "imported") ? "imported" : primary.canonicalStatus,
@@ -70,6 +67,66 @@ export function aggregateSkillsBySlug(skills: SkillRecord[]): SkillRecord[] {
       conflict
     };
   });
+}
+
+function skillIdentityFragments(skill: SkillRecord): SkillRecord[] {
+  const installationGroups = new Map<string, SkillInstallation[]>();
+  for (const installation of skill.installations) {
+    const identity = installationIdentity(installation);
+    installationGroups.set(identity, [...(installationGroups.get(identity) ?? []), installation]);
+  }
+
+  if (installationGroups.size <= 1) {
+    return [{
+      ...skill,
+      issues: skill.issues.filter((issue) => issue.code !== "content-conflict")
+    }];
+  }
+
+  return Array.from(installationGroups.entries()).map(([identity, installations]) => {
+    const firstFrontmatter = installations.find((installation) => installation.frontmatter)?.frontmatter;
+    const canonicalMatches = skill.canonicalHash ? identity === `hash:${skill.canonicalHash}` : false;
+    return {
+      ...skill,
+      id: groupId(skill, identity, installationGroups.size),
+      displayName: firstFrontmatter?.name ?? skill.displayName,
+      description: firstFrontmatter?.description ?? skill.description,
+      canonicalStatus: canonicalMatches ? skill.canonicalStatus : "not-imported",
+      canonicalPath: canonicalMatches ? skill.canonicalPath : undefined,
+      canonicalHash: canonicalMatches ? skill.canonicalHash : undefined,
+      installations,
+      issues: dedupeBy(installations.flatMap((installation) => installation.issues), (issue) =>
+        [issue.code, issue.severity, issue.message, issue.path ?? "", issue.agentId ?? ""].join("\u0000")
+      ),
+      conflict: false
+    };
+  });
+}
+
+function skillIdentity(skill: SkillRecord) {
+  if (skill.canonicalHash) return `hash:${skill.canonicalHash}`;
+  const installation = skill.installations.find((item) => item.hash) ?? skill.installations[0];
+  if (installation) return installationIdentity(installation);
+  if (skill.canonicalPath) return `path:${pathIdentity(skill.canonicalPath)}`;
+  return `id:${skill.id}`;
+}
+
+function installationIdentity(installation: SkillInstallation) {
+  if (installation.hash) return `hash:${installation.hash}`;
+  return `path:${pathIdentity(installation.realPath ?? installation.entryPath)}`;
+}
+
+function groupId(skill: SkillRecord, identity: string, groupCount: number) {
+  if (groupCount <= 1) return skill.id;
+  return `${skill.slug}@${shortHash(identity)}`;
+}
+
+function shortHash(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(31, hash) + value.charCodeAt(index) | 0;
+  }
+  return Math.abs(hash).toString(16).padStart(8, "0").slice(0, 8);
 }
 
 export function syncSourcesForSkills(skills: SkillRecord[]): InstallationRef[] {

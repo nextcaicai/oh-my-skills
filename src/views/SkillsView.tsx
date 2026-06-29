@@ -679,7 +679,6 @@ function SkillDetail({
           <div className="detail-path-list">
             {localPaths.map((item) => (
               <div className="detail-path-row" key={item.id}>
-                <span>{item.label}</span>
                 <code title={item.path}>{settings.showRawPaths ? item.path : compactPath(item.path)}</code>
                 <button
                   className="meta-icon-button"
@@ -729,12 +728,11 @@ function SkillDetail({
 }
 
 function skillLocalPaths(skill: SkillRecord) {
-  const paths: { id: string; label: string; path: string }[] = [];
+  const paths: { id: string; path: string }[] = [];
 
   if (skill.canonicalPath) {
     paths.push({
       id: `library:${skill.canonicalPath}`,
-      label: "中心库",
       path: skill.canonicalPath
     });
   }
@@ -744,7 +742,6 @@ function skillLocalPaths(skill: SkillRecord) {
     if (paths.some((item) => samePath(item.path, installation.entryPath))) continue;
     paths.push({
       id: installation.id,
-      label: `${installation.agentLabel} · ${installation.scope === "project" ? "项目" : "全局"}`,
       path: installation.entryPath
     });
   }

@@ -1044,22 +1044,15 @@
 }
 
 .detail-path-row {
-  display: grid;
-  grid-template-columns: minmax(84px, 120px) minmax(0, 1fr) 24px;
+  display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
-.detail-path-row > span {
-  min-width: 0;
-  overflow: hidden;
-  color: rgba(23, 25, 28, 0.50);
-  font-size: 11px;
-  font-weight: 750;
-  line-height: 1.7;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.detail-path-row code {
+  flex: 0 1 auto;
+  max-width: 100%;
 }
 
 .detail-field code,
