@@ -7,7 +7,7 @@ import { SettingsSheet } from "./components/SettingsSheet";
 import { TabButton } from "./components/TabButton";
 import { demoBatchPlan, demoInventory, demoSkillLocks } from "./lib/demoData";
 import { isTauriRuntime } from "./lib/runtime";
-import { failedUpdateCheck, projectSkillsForFolder, quickMigrationSourcesForSkills, samePath, skillsShUpdateSource, syncSourcesForSkills } from "./lib/skillUtils";
+import { aggregateSkillsBySlug, failedUpdateCheck, projectSkillsForFolder, quickMigrationSourcesForSkills, samePath, skillsShUpdateSource, syncSourcesForSkills } from "./lib/skillUtils";
 import type { QuickMigrationMethod, SkillWorkspace, SyncMode, View } from "./uiTypes";
 import { SkillsView } from "./views/SkillsView";
 import { SyncView } from "./views/SyncView";
@@ -83,7 +83,7 @@ export default function App() {
   );
   const installedAgents = useMemo(() => agents.filter((agent) => agent.installed), [agents]);
   const installedAgentIds = useMemo(() => new Set(installedAgents.map((agent) => agent.id)), [installedAgents]);
-  const allSkills = inventory?.skills ?? [];
+  const allSkills = useMemo(() => aggregateSkillsBySlug(inventory?.skills ?? []), [inventory?.skills]);
   const projectFolders = settings.projectFolders;
 
   useEffect(() => {

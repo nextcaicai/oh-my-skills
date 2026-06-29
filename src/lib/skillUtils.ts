@@ -23,6 +23,55 @@ export function firstValidInstallation(skill: SkillRecord): SkillInstallation | 
   return skill.installations.find((installation) => installation.status !== "invalid" && !installation.brokenSymlink) ?? null;
 }
 
+export function aggregateSkillsBySlug(skills: SkillRecord[]): SkillRecord[] {
+  const grouped = new Map<string, SkillRecord[]>();
+
+  for (const skill of skills) {
+    grouped.set(skill.slug, [...(grouped.get(skill.slug) ?? []), skill]);
+  }
+
+  return Array.from(grouped.values()).map((group) => {
+    if (group.length === 1) return group[0];
+
+    const primary = group.find((skill) => skill.canonicalStatus === "imported") ?? group[0];
+    const installations = dedupeBy(group.flatMap((skill) => skill.installations), (installation) => installation.id);
+    const issues = dedupeBy(group.flatMap((skill) => skill.issues), (issue) =>
+      [issue.code, issue.severity, issue.message, issue.path ?? "", issue.agentId ?? ""].join("\u0000")
+    );
+    const hashes = new Set([
+      ...group.flatMap((skill) => skill.canonicalHash ? [skill.canonicalHash] : []),
+      ...installations.flatMap((installation) => installation.hash ? [installation.hash] : [])
+    ]);
+    const installedAgentIds = new Set(installations.map((installation) => installation.agentId));
+    const knownAgentIds = new Set([
+      ...installedAgentIds,
+      ...group.flatMap((skill) => skill.missingAgents)
+    ]);
+    const conflict = group.some((skill) => skill.conflict) || hashes.size > 1;
+    if (conflict && !issues.some((issue) => issue.code === "content-conflict")) {
+      issues.push({
+        code: "content-conflict",
+        severity: "warning",
+        message: `Multiple content hashes found for skill '${primary.slug}'`
+      });
+    }
+
+    return {
+      ...primary,
+      id: primary.slug,
+      displayName: primary.displayName,
+      description: primary.description ?? group.find((skill) => skill.description)?.description,
+      canonicalStatus: group.some((skill) => skill.canonicalStatus === "imported") ? "imported" : primary.canonicalStatus,
+      canonicalPath: group.find((skill) => skill.canonicalPath)?.canonicalPath,
+      canonicalHash: group.find((skill) => skill.canonicalHash)?.canonicalHash,
+      installations,
+      missingAgents: Array.from(knownAgentIds).filter((agentId) => !installedAgentIds.has(agentId)),
+      issues,
+      conflict
+    };
+  });
+}
+
 export function syncSourcesForSkills(skills: SkillRecord[]): InstallationRef[] {
   return skills.map((skill) => {
     if (skill.canonicalStatus === "imported") {
@@ -135,6 +184,16 @@ export function skillsShUpdateSource(skill: SkillRecord, skillLocks: Record<stri
   const sourceUrl = lock?.sourceUrl || lock?.source;
   if (!installation || !lock || !sourceUrl) return null;
   return { installation, lock, sourceUrl };
+}
+
+function dedupeBy<T>(items: T[], keyOf: (item: T) => string) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = keyOf(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function skillsShLock(skill: SkillRecord, skillLocks: Record<string, SkillLockEntry>) {

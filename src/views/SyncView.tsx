@@ -428,19 +428,18 @@ export function SyncView({
               </div>
             )}
 
-            {applyResult && (
-              <div className={`apply-result ${applyResult.errors.length ? "error" : "success"}`}>
-                <strong>{applyResult.errors.length ? "执行完成，但有错误" : "执行完成"}</strong>
-                <span>{applyResult.appliedOperations.length} 已执行 · {applyResult.skippedOperations.length} 已跳过</span>
-                {applyResult.errors.map((item) => <code key={item}>{item}</code>)}
-              </div>
-            )}
             </aside>
           </section>
         </div>
 
         <div className="sync-action-bar">
-          {activePlan ? (
+          {applyResult ? (
+            <div className={`apply-result ${applyResult.errors.length ? "error" : "success"}`} role="status">
+              <strong>{applyResult.errors.length ? "执行完成，但有错误" : "执行完成"}</strong>
+              <span>{applyResult.appliedOperations.length} 已执行 · {applyResult.skippedOperations.length} 已跳过</span>
+              {applyResult.errors.map((item) => <code key={item}>{item}</code>)}
+            </div>
+          ) : activePlan ? (
             <div className={`plan-status-pill ${blocked ? "blocked" : ""}`}>
               {blocked ? <AlertTriangle size={14} /> : <Check size={14} />}
               <span>{confirmationText}</span>

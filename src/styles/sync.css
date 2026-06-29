@@ -938,11 +938,26 @@
 }
 
 .apply-result {
-  display: grid;
-  gap: 4px;
-  margin-top: 10px;
-  padding: 9px;
+  display: inline-grid;
+  gap: 2px;
+  min-width: 178px;
+  max-width: min(420px, 52vw);
+  padding: 7px 10px;
   border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 14px 36px rgba(22, 24, 26, 0.10);
+}
+
+.apply-result span,
+.apply-result code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apply-result code {
+  font-size: 11px;
 }
 
 .apply-result.success {

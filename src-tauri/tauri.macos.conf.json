@@ -10,7 +10,9 @@
         "minWidth": 1040,
         "minHeight": 680,
         "transparent": true,
-        "backgroundColor": "#00000000",
+        "titleBarStyle": "Transparent",
+        "hiddenTitle": true,
+        "backgroundColor": "#EEEFF0",
         "windowEffects": {
           "effects": ["popover"],
           "state": "active"

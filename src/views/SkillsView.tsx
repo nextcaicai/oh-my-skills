@@ -5,7 +5,7 @@ import { AgentEmptyVisual, ProjectEmptyVisual } from "../components/EmptyStateVi
 import { AgentBadge, AgentIcon, Coverage, IssueList, SkillState } from "../components/shared";
 import { demoAgent } from "../lib/demoData";
 import { isTauriRuntime } from "../lib/runtime";
-import { agentSkillCount, compactPath, firstValidInstallation, projectName, projectStats, skillListStatus, skillSourceSummary } from "../lib/skillUtils";
+import { agentSkillCount, compactPath, projectName, projectStats, samePath, skillListStatus, skillSourceSummary } from "../lib/skillUtils";
 import type { AgentRecord, ProjectWorkspaceCandidate, Settings as AppSettings, SkillLockEntry, SkillRecord, SkillUpdateCheck } from "../types";
 import type { SkillWorkspace } from "../uiTypes";
 
@@ -637,14 +637,17 @@ function SourceOwnerTag({ skill, skillLocks }: { skill: SkillRecord; skillLocks:
 }
 
 function SkillAgentStack({ skill, agents }: { skill: SkillRecord; agents: AgentRecord[] }) {
-  const knownAgents = skill.installations
-    .map((installation) => {
+  const uniqueAgents = Array.from(
+    new Map(skill.installations.map((installation) => {
       const agent = agents.find((item) => item.id === installation.agentId);
-      if (agent) return agent;
-      return demoAgent(installation.agentId, installation.agentLabel, installation.status, 0, []);
-    })
-    .slice(0, 5);
-  const extra = Math.max(0, skill.installations.length - knownAgents.length);
+      return [
+        installation.agentId,
+        agent ?? demoAgent(installation.agentId, installation.agentLabel, installation.status, 0, [])
+      ] as const;
+    })).values()
+  );
+  const knownAgents = uniqueAgents.slice(0, 5);
+  const extra = Math.max(0, uniqueAgents.length - knownAgents.length);
 
   return (
     <div className="skill-agent-stack" aria-label="已安装 Agent">
@@ -667,25 +670,31 @@ function SkillDetail({
   skillLocks: Record<string, SkillLockEntry>;
 }) {
   const source = skillSourceSummary(skill, skillLocks);
-  const sourceInstallation = firstValidInstallation(skill);
-  const localPath = skill.canonicalPath ?? sourceInstallation?.entryPath ?? "";
+  const localPaths = skillLocalPaths(skill);
 
   return (
     <div className="skill-detail">
-      {localPath && (
+      {localPaths.length > 0 && (
         <DetailField label="本地路径">
-          <code title={localPath}>{settings.showRawPaths ? localPath : compactPath(localPath)}</code>
-          <button
-            className="meta-icon-button"
-            onClick={(event) => {
-              event.stopPropagation();
-              void openPath(localPath);
-            }}
-            title="打开本地路径"
-            type="button"
-          >
-            <FolderOpen size={15} />
-          </button>
+          <div className="detail-path-list">
+            {localPaths.map((item) => (
+              <div className="detail-path-row" key={item.id}>
+                <span>{item.label}</span>
+                <code title={item.path}>{settings.showRawPaths ? item.path : compactPath(item.path)}</code>
+                <button
+                  className="meta-icon-button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void openPath(item.path);
+                  }}
+                  title="打开本地路径"
+                  type="button"
+                >
+                  <FolderOpen size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
         </DetailField>
       )}
 
@@ -717,6 +726,30 @@ function SkillDetail({
       )}
     </div>
   );
+}
+
+function skillLocalPaths(skill: SkillRecord) {
+  const paths: { id: string; label: string; path: string }[] = [];
+
+  if (skill.canonicalPath) {
+    paths.push({
+      id: `library:${skill.canonicalPath}`,
+      label: "中心库",
+      path: skill.canonicalPath
+    });
+  }
+
+  for (const installation of skill.installations) {
+    if (!installation.entryPath) continue;
+    if (paths.some((item) => samePath(item.path, installation.entryPath))) continue;
+    paths.push({
+      id: installation.id,
+      label: `${installation.agentLabel} · ${installation.scope === "project" ? "项目" : "全局"}`,
+      path: installation.entryPath
+    });
+  }
+
+  return paths;
 }
 
 function DetailField({ label, children }: { label: string; children: ReactNode }) {
