@@ -379,7 +379,7 @@ export function SkillsView({
             <div className="skill-table-head">
               <span />
               <span>Skill</span>
-              <span>{isLibraryWorkspace ? "引用次数" : "Agent 覆盖"}</span>
+              <span>{isLibraryWorkspace ? "引用位置" : "Agent 覆盖"}</span>
               <span>状态</span>
             </div>
 
@@ -685,7 +685,7 @@ function SkillAgentStack({ skill, agents }: { skill: SkillRecord; agents: AgentR
 function SkillReferenceCell({ skill }: { skill: SkillRecord }) {
   const summary = centralLibraryReferenceSummary(skill);
   const detail = summary.total === 0
-    ? "暂未发现指向中心库副本的软链接"
+    ? "暂未发现指向中心库副本的引用位置"
     : [
         summary.global > 0 ? `全局 ${summary.global}` : "",
         summary.project > 0 ? `项目 ${summary.project}` : ""
@@ -694,7 +694,7 @@ function SkillReferenceCell({ skill }: { skill: SkillRecord }) {
   return (
     <div className={`skill-reference-cell ${summary.total === 0 ? "empty" : ""}`} title={detail}>
       <strong>{summary.total}</strong>
-      <span>{summary.total === 0 ? "未引用" : "个引用"}</span>
+      <span>{summary.total === 0 ? "未引用" : "个位置"}</span>
       {summary.total > 0 && <small>{detail}</small>}
     </div>
   );

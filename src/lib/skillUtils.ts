@@ -198,11 +198,6 @@ export function skillListStatus(
     return { kind: "check", label: "需检查", title: "检测到内容冲突、缺失文件或无效安装入口" };
   }
 
-  const agentsSkill = skill.installations.some((installation) => isAgentsSkillPath(installation.entryPath));
-  if (agentsSkill && !skillsShLock(skill, skillLocks)) {
-    return { kind: "check", label: "需检查", title: "skills.sh 安装缺少 lock 信息，无法判断来源和更新" };
-  }
-
   if (updateCheck?.status === "available") {
     return { kind: "update", label: "可更新", title: "发现 skills.sh 来源有新内容，点击更新" };
   }
@@ -217,8 +212,8 @@ export function skillListStatus(
 }
 
 export function skillSourceSummary(skill: SkillRecord, skillLocks: Record<string, SkillLockEntry>) {
-  const skillsShInstallation = skill.installations.find((installation) => isAgentsSkillPath(installation.entryPath));
   const lock = skillsShLock(skill, skillLocks);
+  const skillsShInstallation = lock ? skillsShInstallationCandidate(skill) : null;
   if (skillsShInstallation && lock) {
     const detail = formatSourceDetail(lock.sourceUrl || lock.source || skillsShInstallation.entryPath);
     return {
@@ -262,24 +257,33 @@ export function skillSourceSummary(skill: SkillRecord, skillLocks: Record<string
 }
 
 export function skillsShUpdateSource(skill: SkillRecord, skillLocks: Record<string, SkillLockEntry>) {
-  const installation = skill.installations.find((item) => isAgentsSkillPath(item.entryPath));
   const lock = skillsShLock(skill, skillLocks);
+  const installation = lock ? skillsShInstallationCandidate(skill) : null;
   const sourceUrl = lock?.sourceUrl || lock?.source;
   if (!installation || !lock || !sourceUrl) return null;
   return { installation, lock, sourceUrl };
 }
 
 export function centralLibraryReferenceSummary(skill: SkillRecord) {
-  return skill.installations.reduce(
-    (summary, installation) => {
-      if (!isCentralLibraryReference(skill, installation)) return summary;
-      summary.total += 1;
-      if (installation.scope === "project") summary.project += 1;
-      else if (installation.scope === "global") summary.global += 1;
-      return summary;
-    },
-    { total: 0, global: 0, project: 0 }
-  );
+  const positions = new Map<string, "global" | "project" | "other">();
+
+  for (const installation of skill.installations) {
+    if (!isCentralLibraryReference(skill, installation)) continue;
+    const key = pathIdentity(installation.entryPath);
+    const scope = installation.scope === "global" || installation.scope === "project"
+      ? installation.scope
+      : "other";
+    positions.set(key, scope);
+  }
+
+  let global = 0;
+  let project = 0;
+  for (const scope of positions.values()) {
+    if (scope === "global") global += 1;
+    if (scope === "project") project += 1;
+  }
+
+  return { total: positions.size, global, project };
 }
 
 export function isCentralLibraryReference(skill: SkillRecord, installation: SkillInstallation) {
@@ -311,6 +315,12 @@ function skillsShLock(skill: SkillRecord, skillLocks: Record<string, SkillLockEn
 }
 
 const AGENTS_SKILL_PATH_REGEX = /(?:^|\/)\.agents\/skills\/[^/]+$/;
+
+function skillsShInstallationCandidate(skill: SkillRecord) {
+  return skill.installations.find((installation) =>
+    isAgentsSkillPath(installation.entryPath) && !isCentralLibraryReference(skill, installation)
+  ) ?? null;
+}
 
 function isAgentsSkillPath(path: string) {
   return AGENTS_SKILL_PATH_REGEX.test(normalizedPath(path));
