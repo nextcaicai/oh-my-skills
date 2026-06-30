@@ -33,6 +33,7 @@ const defaultSettings: AppSettings = {
 };
 
 const appLogo = new URL("../oms_logo.svg", import.meta.url).href;
+const selectionKeySeparator = "\u0000";
 
 export default function App() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
@@ -48,6 +49,7 @@ export default function App() {
   const [discoveryBasePath, setDiscoveryBasePath] = useState<string | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(new Set());
+  const [syncQueuedSkillIds, setSyncQueuedSkillIds] = useState<Set<string>>(new Set());
   const [skillUpdateChecks, setSkillUpdateChecks] = useState<Record<string, SkillUpdateCheck>>({});
   const [updatingSkillIds, setUpdatingSkillIds] = useState<Set<string>>(new Set());
   const [syncPlan, setSyncPlan] = useState<SyncPlan | null>(null);
@@ -147,9 +149,23 @@ export default function App() {
     [filteredSkills, selectedSkillId]
   );
 
+  const scopedSelectedSkillIds = useMemo(
+    () => new Set(
+      visibleSourceSkills
+        .filter((skill) => selectedSkillIds.has(selectionKeyFor(skillWorkspace, selectedProjectFolder, skill.id)))
+        .map((skill) => skill.id)
+    ),
+    [selectedProjectFolder, selectedSkillIds, skillWorkspace, visibleSourceSkills]
+  );
+
+  const selectedSkills = useMemo(
+    () => selectedSkillsForKeys(selectedSkillIds, allSkills, globalSkills, projectFolders, librarySkills),
+    [allSkills, globalSkills, librarySkills, projectFolders, selectedSkillIds]
+  );
+
   const queuedSkills = useMemo(
-    () => allSkills.filter((skill) => selectedSkillIds.has(skill.id)),
-    [allSkills, selectedSkillIds]
+    () => selectedSkillsForKeys(syncQueuedSkillIds, allSkills, globalSkills, projectFolders, librarySkills),
+    [allSkills, globalSkills, librarySkills, projectFolders, syncQueuedSkillIds]
   );
 
   async function boot() {
@@ -186,8 +202,11 @@ export default function App() {
       });
       setSelectedSkillIds((current) => {
         if (!cachedInventory) return new Set();
-        const valid = new Set(cachedInventory.skills.map((skill) => skill.id));
-        return new Set([...current].filter((id) => valid.has(id)));
+        return filterValidSelectionKeys(current, aggregateSkillsBySlug(cachedInventory.skills), loaded.projectFolders);
+      });
+      setSyncQueuedSkillIds((current) => {
+        if (!cachedInventory) return new Set();
+        return filterValidSelectionKeys(current, aggregateSkillsBySlug(cachedInventory.skills), loaded.projectFolders);
       });
       setBusy("");
     } catch (reason) {
@@ -225,8 +244,10 @@ export default function App() {
         return null;
       });
       setSelectedSkillIds((current) => {
-        const valid = new Set(next.skills.map((skill) => skill.id));
-        return new Set([...current].filter((id) => valid.has(id)));
+        return filterValidSelectionKeys(current, aggregateSkillsBySlug(next.skills), settings.projectFolders);
+      });
+      setSyncQueuedSkillIds((current) => {
+        return filterValidSelectionKeys(current, aggregateSkillsBySlug(next.skills), settings.projectFolders);
       });
     } catch (reason) {
       setError(String(reason));
@@ -390,7 +411,7 @@ export default function App() {
     const saved = await saveProjectFolders(projectFolders, "关联项目工作区");
     if (!saved) return;
     setSelectedProjectFolder(path);
-    setSkillWorkspace("project");
+    switchSkillWorkspace("project");
     setView("skills");
     setDiscoveredProjects((current) =>
       current.map((candidate) => candidate.path === path ? { ...candidate, alreadyLinked: true } : candidate)
@@ -438,7 +459,7 @@ export default function App() {
     discoveryRunRef.current = runId;
     setBusy("扫描发现项目工作区");
     setError(null);
-    setSkillWorkspace("project");
+    switchSkillWorkspace("project");
     setView("skills");
     setDiscoveryBasePath(selected);
     try {
@@ -491,22 +512,31 @@ export default function App() {
   }
 
   function toggleSkill(id: string) {
+    const selectionKey = selectionKeyFor(skillWorkspace, selectedProjectFolder, id);
     setSelectedSkillIds((current) => {
       const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(selectionKey)) next.delete(selectionKey);
+      else next.add(selectionKey);
       return next;
     });
   }
 
   function openSelectedSkillsSync(mode: SyncMode) {
     if (selectedSkillIds.size === 0) return;
+    setSyncQueuedSkillIds((current) => new Set([...current, ...selectedSkillIds]));
     setView("sync");
     setSyncMode(mode);
   }
 
   function clearSelectedSkills() {
     setSelectedSkillIds(new Set());
+  }
+
+  function switchSkillWorkspace(workspace: SkillWorkspace) {
+    if (skillWorkspace !== workspace) {
+      setSelectedSkillIds(new Set());
+    }
+    setSkillWorkspace(workspace);
   }
 
   async function refreshSkillsShUpdateChecks(skills: SkillRecord[], locks: Record<string, SkillLockEntry>) {
@@ -624,14 +654,15 @@ export default function App() {
             discoveryBasePath={discoveryBasePath}
             discovering={busy === "扫描发现项目工作区"}
             selectedSkill={selectedSkill}
-            selectedSkillIds={selectedSkillIds}
+            selectedSkillIds={scopedSelectedSkillIds}
+            selectedSkills={selectedSkills}
             query={query}
             agentFilter={agentFilter}
             settings={settings}
             onQuery={setQuery}
             onAgentFilter={setAgentFilter}
             onWorkspace={(workspace) => {
-              setSkillWorkspace(workspace);
+              switchSkillWorkspace(workspace);
               setSelectedSkillId(null);
               setQuery("");
               setAgentFilter("all");
@@ -668,9 +699,14 @@ export default function App() {
             syncMode={syncMode}
             onSyncModeChange={setSyncMode}
             onRemoveSkill={(id) => {
-              setSelectedSkillIds((current) => {
+              setSyncQueuedSkillIds((current) => {
                 const next = new Set(current);
                 next.delete(id);
+                if (next.size === current.size) {
+                  for (const key of current) {
+                    if (selectionSkillId(key) === id) next.delete(key);
+                  }
+                }
                 return next;
               });
             }}
@@ -700,4 +736,82 @@ export default function App() {
       )}
     </main>
   );
+}
+
+function selectionKeyFor(workspace: SkillWorkspace, projectPath: string | null, skillId: string) {
+  return [
+    workspace,
+    workspace === "project" ? projectPath ?? "" : "",
+    skillId
+  ].join(selectionKeySeparator);
+}
+
+function selectionParts(key: string) {
+  const [workspace, projectPath, skillId] = key.split(selectionKeySeparator);
+  return {
+    workspace: workspace as SkillWorkspace | undefined,
+    projectPath: projectPath || null,
+    skillId: skillId ?? key
+  };
+}
+
+function selectionSkillId(key: string) {
+  return selectionParts(key).skillId;
+}
+
+function selectedSkillsForKeys(
+  keys: Set<string>,
+  allSkills: SkillRecord[],
+  globalSkills: SkillRecord[],
+  projectFolders: string[],
+  librarySkills: SkillRecord[]
+) {
+  const selected: SkillRecord[] = [];
+
+  for (const key of keys) {
+    const { workspace, projectPath, skillId } = selectionParts(key);
+    const skill = skillForSelection(workspace, projectPath, skillId, allSkills, globalSkills, projectFolders, librarySkills);
+    if (skill) selected.push({ ...skill, selectionKey: key });
+  }
+
+  return selected;
+}
+
+function filterValidSelectionKeys(keys: Set<string>, allSkills: SkillRecord[], projectFolders: string[]) {
+  const globalSkills = allSkills.filter((skill) => skill.installations.some((item) => item.scope === "global"));
+  const librarySkills = allSkills.filter((skill) => skill.canonicalStatus === "imported");
+  const valid = new Set<string>();
+
+  for (const key of keys) {
+    const { workspace, projectPath, skillId } = selectionParts(key);
+    if (skillForSelection(workspace, projectPath, skillId, allSkills, globalSkills, projectFolders, librarySkills)) {
+      valid.add(key);
+    }
+  }
+
+  return valid;
+}
+
+function skillForSelection(
+  workspace: SkillWorkspace | undefined,
+  projectPath: string | null,
+  skillId: string,
+  allSkills: SkillRecord[],
+  globalSkills: SkillRecord[],
+  projectFolders: string[],
+  librarySkills: SkillRecord[]
+) {
+  if (workspace === "global") {
+    return globalSkills.find((skill) => skill.id === skillId) ?? null;
+  }
+
+  if (workspace === "library") {
+    return librarySkills.find((skill) => skill.id === skillId) ?? null;
+  }
+
+  if (workspace === "project" && projectPath && projectFolders.includes(projectPath)) {
+    return projectSkillsForFolder(allSkills, projectPath).find((skill) => skill.id === skillId) ?? null;
+  }
+
+  return null;
 }

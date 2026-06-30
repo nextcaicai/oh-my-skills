@@ -282,15 +282,16 @@ export function SyncView({
                   {queuedSkills.map((skill) => {
                     const selectedSource = firstValidInstallation(skill);
                     const sourcePath = selectedSource?.entryPath ?? skill.canonicalPath ?? "";
+                    const selectionKey = skill.selectionKey ?? skill.id;
                     return (
-                      <div className="selected-skill-card" key={skill.id}>
+                      <div className="selected-skill-card" key={selectionKey}>
                         <span>
                           <strong>{skill.displayName}</strong>
                           <small title={sourcePath || skill.slug}>
                             {sourcePath ? compactPath(sourcePath) : skill.slug}
                           </small>
                         </span>
-                        <button className="selected-skill-remove" onClick={() => onRemoveSkill(skill.id)} title="取消选择" type="button">
+                        <button className="selected-skill-remove" onClick={() => onRemoveSkill(selectionKey)} title="取消选择" type="button">
                           <X size={14} />
                         </button>
                       </div>

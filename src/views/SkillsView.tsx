@@ -25,6 +25,7 @@ export function SkillsView({
   discovering,
   selectedSkill,
   selectedSkillIds,
+  selectedSkills,
   query,
   agentFilter,
   settings,
@@ -60,6 +61,7 @@ export function SkillsView({
   discovering: boolean;
   selectedSkill: SkillRecord | null;
   selectedSkillIds: Set<string>;
+  selectedSkills: SkillRecord[];
   query: string;
   agentFilter: string;
   settings: AppSettings;
@@ -164,7 +166,6 @@ export function SkillsView({
       : isLibraryWorkspace
         ? "从全局或项目工作区选择 Skill 导入中心库后，这里会显示可统一分发的规范副本。"
         : "重新扫描或从中心库同步到某个 Agent 后，这里会显示机器级生效的 Skills。";
-  const selectedSkills = selectedSkillsInOrder(selectedSkillIds, allSkills);
   const selectedCount = selectedSkills.length;
   const recentSelectedSkills = selectedSkills.slice(-2);
   const extraSelectedCount = Math.max(0, selectedCount - recentSelectedSkills.length);
@@ -544,11 +545,6 @@ function ProjectWorkspaceEmptyState({
       </div>
     </section>
   );
-}
-
-function selectedSkillsInOrder(selectedSkillIds: Set<string>, skills: SkillRecord[]) {
-  const byId = new Map(skills.map((skill) => [skill.id, skill]));
-  return [...selectedSkillIds].map((id) => byId.get(id)).filter((skill): skill is SkillRecord => Boolean(skill));
 }
 
 function SkillRow({

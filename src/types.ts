@@ -96,6 +96,7 @@ export type SkillInstallation = {
 
 export type SkillRecord = {
   id: string;
+  selectionKey?: string;
   slug: string;
   displayName: string;
   description?: string;
