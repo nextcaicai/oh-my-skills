@@ -1083,17 +1083,21 @@
 .apply-result {
   display: inline-flex;
   align-items: center;
-  min-height: 42px;
-  padding: 0 18px;
-  border-radius: 12px;
+  gap: 6px;
+  min-width: 0;
+  max-width: min(760px, 58vw);
+  padding: 4px 10px;
+  border-radius: 999px;
   font-size: 12px;
   line-height: 1.35;
-  box-shadow: 0 14px 36px rgba(22, 24, 26, 0.10);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .apply-result span {
-  font-weight: 850;
-  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .apply-result code {
@@ -1107,12 +1111,12 @@
 }
 
 .apply-result.success {
-  background: rgba(35, 139, 105, 0.14);
+  background: rgba(35, 139, 105, 0.12);
   color: #116149;
 }
 
 .apply-result.error {
-  background: rgba(190, 62, 49, 0.13);
+  background: rgba(190, 62, 49, 0.12);
   color: #9d2d24;
 }
 
