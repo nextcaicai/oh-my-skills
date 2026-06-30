@@ -1,5 +1,5 @@
 import { AlertTriangle, ArrowRight, Check, ChevronLeft, ChevronRight, Copy, CopyCheck, FolderPlus, Globe2, Info, Link2, Plus, ShieldCheck, X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { AgentIcon } from "../components/shared";
 import { agentSignalSummary, compactPath, firstValidInstallation, syncPlanSummary } from "../lib/skillUtils";
 import type { AgentRecord, AgentTarget, ApplyResult, Settings as AppSettings, SkillRecord, SyncOperation, SyncPlan, SyncReplacement } from "../types";
@@ -454,12 +454,7 @@ export function SyncView({
                 <span>{confirmationText}</span>
               </div>
               {planDetails && (
-                <div className="plan-info-wrap">
-                  <button className="plan-info-button" type="button" aria-label="查看同步明细">
-                    <Info size={14} />
-                  </button>
-                  <PlanDetailPanel details={planDetails} onIncludeReplacement={includeReplacement} busy={busy} />
-                </div>
+                <PlanInfoDisclosure details={planDetails} onIncludeReplacement={includeReplacement} busy={busy} />
               )}
             </div>
           ) : bottomPreviewText ? (
@@ -489,6 +484,54 @@ export function SyncView({
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+function PlanInfoDisclosure({
+  details,
+  onIncludeReplacement,
+  busy
+}: {
+  details: PlanDetail[];
+  onIncludeReplacement: (operation: SyncOperation) => void;
+  busy: boolean;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [panelStyle, setPanelStyle] = useState<CSSProperties>();
+
+  function updatePanelPosition() {
+    const button = buttonRef.current;
+    if (!button) return;
+
+    const viewportMargin = 16;
+    const buttonRect = button.getBoundingClientRect();
+    const panelWidth = Math.min(620, Math.max(280, window.innerWidth - viewportMargin * 2));
+    const minLeft = viewportMargin;
+    const maxLeft = Math.max(minLeft, window.innerWidth - panelWidth - viewportMargin);
+    const preferredLeft = buttonRect.right - panelWidth;
+    const left = Math.min(Math.max(preferredLeft, minLeft), maxLeft);
+    const maxHeight = Math.min(380, Math.max(180, buttonRect.top - viewportMargin), window.innerHeight - viewportMargin * 2);
+
+    setPanelStyle({
+      left,
+      bottom: window.innerHeight - buttonRect.top + 10,
+      width: panelWidth,
+      maxHeight
+    });
+  }
+
+  useEffect(() => {
+    window.addEventListener("resize", updatePanelPosition);
+    return () => window.removeEventListener("resize", updatePanelPosition);
+  }, []);
+
+  return (
+    <div className="plan-info-wrap" onPointerEnter={updatePanelPosition} onFocusCapture={updatePanelPosition}>
+      <button ref={buttonRef} className="plan-info-button" type="button" aria-label="查看同步明细">
+        <Info size={14} />
+      </button>
+      <PlanDetailPanel details={details} onIncludeReplacement={onIncludeReplacement} busy={busy} style={panelStyle} />
     </div>
   );
 }
@@ -615,18 +658,20 @@ type PlanDetail = {
 function PlanDetailPanel({
   details,
   onIncludeReplacement,
-  busy
+  busy,
+  style
 }: {
   details: PlanDetail[];
   onIncludeReplacement: (operation: SyncOperation) => void;
   busy: boolean;
+  style?: CSSProperties;
 }) {
   const blockedItems = details.filter((item) => item.kind === "blocked");
   const attentionItems = details.filter((item) => item.kind === "attention");
   const hasDetails = details.length > 0;
 
   return (
-    <div className="plan-detail-panel" role="tooltip">
+    <div className="plan-detail-panel" role="tooltip" style={style}>
       {!hasDetails ? (
         <div className="plan-detail-empty">
           <strong>本次没有异常项</strong>

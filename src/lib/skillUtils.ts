@@ -269,6 +269,33 @@ export function skillsShUpdateSource(skill: SkillRecord, skillLocks: Record<stri
   return { installation, lock, sourceUrl };
 }
 
+export function centralLibraryReferenceSummary(skill: SkillRecord) {
+  return skill.installations.reduce(
+    (summary, installation) => {
+      if (!isCentralLibraryReference(skill, installation)) return summary;
+      summary.total += 1;
+      if (installation.scope === "project") summary.project += 1;
+      else if (installation.scope === "global") summary.global += 1;
+      return summary;
+    },
+    { total: 0, global: 0, project: 0 }
+  );
+}
+
+export function isCentralLibraryReference(skill: SkillRecord, installation: SkillInstallation) {
+  if (!skill.canonicalPath || !installation.isSymlink) return false;
+
+  const canonicalPath = skill.canonicalPath;
+  const linkParent = parentPath(installation.entryPath);
+  const candidates = [
+    installation.realPath,
+    installation.symlinkTarget,
+    installation.symlinkTarget && linkParent ? resolvePath(linkParent, installation.symlinkTarget) : undefined
+  ].filter((path): path is string => Boolean(path));
+
+  return candidates.some((path) => samePath(path, canonicalPath));
+}
+
 function dedupeBy<T>(items: T[], keyOf: (item: T) => string) {
   const seen = new Set<string>();
   return items.filter((item) => {
@@ -395,6 +422,30 @@ function isPathInFolder(path: string, folder: string) {
   const child = pathIdentity(path);
   const parent = pathIdentity(folder);
   return child === parent || child.startsWith(`${parent}/`);
+}
+
+function parentPath(path: string) {
+  const clean = normalizedPath(path).replace(/\/+$/, "");
+  const index = clean.lastIndexOf("/");
+  if (index <= 0) return null;
+  return clean.slice(0, index);
+}
+
+function resolvePath(base: string, target: string) {
+  const cleanTarget = normalizedPath(target);
+  if (cleanTarget.startsWith("/") || /^[a-z]:\//i.test(cleanTarget)) return cleanTarget;
+
+  const segments = [...normalizedPath(base).split("/"), ...cleanTarget.split("/")];
+  const resolved: string[] = [];
+  for (const segment of segments) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      resolved.pop();
+      continue;
+    }
+    resolved.push(segment);
+  }
+  return normalizedPath(base).startsWith("/") ? `/${resolved.join("/")}` : resolved.join("/");
 }
 
 function normalizedPath(path: string) {

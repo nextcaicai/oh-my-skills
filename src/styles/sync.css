@@ -802,13 +802,13 @@
 }
 
 .plan-detail-panel {
-  position: absolute;
-  z-index: 20;
-  right: 0;
-  bottom: calc(100% + 10px);
+  position: fixed;
+  z-index: 80;
+  left: 16px;
+  bottom: 72px;
   display: none;
-  width: min(620px, calc(100vw - 84px));
-  max-height: min(380px, 56vh);
+  width: min(620px, calc(100vw - 32px));
+  max-height: min(380px, calc(100vh - 32px));
   overflow: auto;
   padding: 12px;
   border: 1px solid rgba(24, 26, 29, 0.12);

@@ -5,7 +5,7 @@ import { AgentEmptyVisual, ProjectEmptyVisual } from "../components/EmptyStateVi
 import { AgentBadge, AgentIcon, Coverage, IssueList, SkillState } from "../components/shared";
 import { demoAgent } from "../lib/demoData";
 import { isTauriRuntime } from "../lib/runtime";
-import { agentSkillCount, compactPath, projectName, projectStats, samePath, skillListStatus, skillSourceSummary } from "../lib/skillUtils";
+import { agentSkillCount, centralLibraryReferenceSummary, compactPath, projectName, projectStats, samePath, skillListStatus, skillSourceSummary } from "../lib/skillUtils";
 import type { AgentRecord, ProjectWorkspaceCandidate, Settings as AppSettings, SkillLockEntry, SkillRecord, SkillUpdateCheck } from "../types";
 import type { SkillWorkspace } from "../uiTypes";
 
@@ -379,7 +379,7 @@ export function SkillsView({
             <div className="skill-table-head">
               <span />
               <span>Skill</span>
-              <span>Agent 覆盖</span>
+              <span>{isLibraryWorkspace ? "引用次数" : "Agent 覆盖"}</span>
               <span>状态</span>
             </div>
 
@@ -396,6 +396,7 @@ export function SkillsView({
                       checked={selectedSkillIds.has(skill.id)}
                       updateCheck={skillUpdateChecks[skill.id]}
                       updating={updatingSkillIds.has(skill.id)}
+                      workspace={workspace}
                       onSelect={() => onSelectSkill(expanded ? null : skill.id)}
                       onToggle={() => onToggleSkill(skill.id)}
                       onUpdate={() => onUpdateSkill(skill)}
@@ -555,6 +556,7 @@ function SkillRow({
   checked,
   updateCheck,
   updating,
+  workspace,
   onSelect,
   onToggle,
   onUpdate
@@ -566,6 +568,7 @@ function SkillRow({
   checked: boolean;
   updateCheck?: SkillUpdateCheck;
   updating: boolean;
+  workspace: SkillWorkspace;
   onSelect: () => void;
   onToggle: () => void;
   onUpdate: () => void;
@@ -595,7 +598,9 @@ function SkillRow({
         </strong>
         <span className="skill-row-description">{skill.description || skill.slug}</span>
       </button>
-      <SkillAgentStack skill={skill} agents={agents} />
+      {workspace === "library"
+        ? <SkillReferenceCell skill={skill} />
+        : <SkillAgentStack skill={skill} agents={agents} />}
       <SkillStatusCell
         skill={skill}
         skillLocks={skillLocks}
@@ -673,6 +678,24 @@ function SkillAgentStack({ skill, agents }: { skill: SkillRecord; agents: AgentR
       ))}
       {extra > 0 && <span className="agent-extra">+{extra}</span>}
       {knownAgents.length === 0 && <span className="muted">未安装</span>}
+    </div>
+  );
+}
+
+function SkillReferenceCell({ skill }: { skill: SkillRecord }) {
+  const summary = centralLibraryReferenceSummary(skill);
+  const detail = summary.total === 0
+    ? "暂未发现指向中心库副本的软链接"
+    : [
+        summary.global > 0 ? `全局 ${summary.global}` : "",
+        summary.project > 0 ? `项目 ${summary.project}` : ""
+      ].filter(Boolean).join(" · ");
+
+  return (
+    <div className={`skill-reference-cell ${summary.total === 0 ? "empty" : ""}`} title={detail}>
+      <strong>{summary.total}</strong>
+      <span>{summary.total === 0 ? "未引用" : "个引用"}</span>
+      {summary.total > 0 && <small>{detail}</small>}
     </div>
   );
 }

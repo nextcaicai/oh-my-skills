@@ -1,11 +1,12 @@
 use crate::fs_ops::{ensure_dir, hash_dir, path_to_string, skill_slug_from_path};
 use crate::models::{
     InventorySnapshot, ResolvedRoot, ScanOptions, SkillContent, SkillFrontmatter,
-    SkillInstallation, SkillIssue, SkillRecord,
+    SkillInstallation, SkillIssue, SkillRecord, SyncPlan,
 };
-use crate::registry::{detect_agents, resolve_roots};
+use crate::registry::{detect_agents, known_agents, resolve_roots};
 use crate::settings::{app_data_dir, load_settings};
 use chrono::Utc;
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -16,7 +17,9 @@ pub fn scan(app: &AppHandle, options: ScanOptions) -> Result<InventorySnapshot, 
     let settings = load_settings(app)?;
     let app_data = app_data_dir(app)?;
     let library_path = PathBuf::from(&settings.library_path);
-    let roots = resolve_roots(&settings, options.include_orphaned);
+    let mut roots = resolve_roots(&settings, options.include_orphaned);
+    roots.extend(managed_project_roots_from_history(&app_data)?);
+    let roots = dedupe_resolved_roots(roots);
     let agents = detect_agents(&settings, options.include_orphaned);
 
     let mut all_issues = Vec::new();
@@ -244,6 +247,114 @@ fn scan_canonical_library(
     Ok(canonical)
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SyncHistoryEntry {
+    plan_id: String,
+    #[serde(default)]
+    applied_operations: Vec<String>,
+}
+
+fn managed_project_roots_from_history(app_data: &Path) -> Result<Vec<ResolvedRoot>, String> {
+    let history_path = app_data.join("sync-history.json");
+    let Ok(text) = fs::read_to_string(&history_path) else {
+        return Ok(Vec::new());
+    };
+    let history = serde_json::from_str::<Vec<SyncHistoryEntry>>(&text).map_err(|error| {
+        format!(
+            "Unable to parse sync history {}: {error}",
+            path_to_string(&history_path)
+        )
+    })?;
+    let plans_dir = app_data.join("plans");
+    let definitions = known_agents();
+    let mut roots = Vec::new();
+
+    for entry in history {
+        if entry.applied_operations.is_empty() {
+            continue;
+        }
+        let plan_path = plans_dir.join(format!("{}.json", entry.plan_id));
+        let Ok(plan_text) = fs::read_to_string(&plan_path) else {
+            continue;
+        };
+        let plan = serde_json::from_str::<SyncPlan>(&plan_text).map_err(|error| {
+            format!(
+                "Unable to parse sync plan {}: {error}",
+                path_to_string(&plan_path)
+            )
+        })?;
+        let applied = entry
+            .applied_operations
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+
+        for operation in plan.operations {
+            if !applied.contains(&operation.id) {
+                continue;
+            }
+            let Some(target_path) = operation.target_path.as_deref() else {
+                continue;
+            };
+            let target_path = PathBuf::from(target_path);
+            let matching_definitions = definitions.iter().filter(|definition| {
+                operation
+                    .agent_id
+                    .as_deref()
+                    .map(|agent_id| agent_id == definition.id)
+                    .unwrap_or(true)
+            });
+            for definition in matching_definitions {
+                for relative in &definition.project_roots {
+                    let Some(root_path) = project_root_from_target_path(&target_path, relative)
+                    else {
+                        continue;
+                    };
+                    if !root_path.exists() {
+                        continue;
+                    }
+                    roots.push(ResolvedRoot {
+                        agent_id: definition.id.clone(),
+                        agent_label: definition.label.clone(),
+                        scope: "project".to_string(),
+                        path: path_to_string(&root_path),
+                        exists: true,
+                        active: true,
+                        orphaned: false,
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(dedupe_resolved_roots(roots))
+}
+
+fn project_root_from_target_path(target_path: &Path, relative: &str) -> Option<PathBuf> {
+    let relative = Path::new(relative);
+    if target_path.ends_with(relative) {
+        return Some(target_path.to_path_buf());
+    }
+    let parent = target_path.parent()?;
+    if parent.ends_with(relative) {
+        return Some(parent.to_path_buf());
+    }
+    None
+}
+
+fn dedupe_resolved_roots(roots: Vec<ResolvedRoot>) -> Vec<ResolvedRoot> {
+    let mut seen = BTreeSet::new();
+    roots
+        .into_iter()
+        .filter(|root| {
+            seen.insert(format!(
+                "{}\u{0}{}\u{0}{}",
+                root.agent_id, root.scope, root.path
+            ))
+        })
+        .collect()
+}
+
 fn scan_root(
     root: &ResolvedRoot,
     library_path: &Path,
@@ -453,7 +564,13 @@ pub fn inspect_installation(
         }
 
         hash = hash_dir(inspect_path).ok();
-        if is_symlink && inspect_path.starts_with(library_path) {
+        let canonical_library_path = fs::canonicalize(library_path).ok();
+        let points_to_library = inspect_path.starts_with(library_path)
+            || canonical_library_path
+                .as_ref()
+                .map(|path| inspect_path.starts_with(path))
+                .unwrap_or(false);
+        if is_symlink && points_to_library {
             status = "linked".to_string();
         }
     }
@@ -651,6 +768,7 @@ fn issue(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::SyncOperation;
     use std::fs;
 
     #[test]
@@ -741,6 +859,116 @@ mod tests {
             inspect_installation("test", "Test", "plugin", temp.path(), &skill, temp.path());
 
         assert_eq!(installation.status, "plugin-installed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn marks_library_symlink_as_linked_when_library_path_is_not_canonical() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let real_library = temp.path().join("real-library");
+        let alias_library = temp.path().join("alias-library");
+        let source_skill = real_library.join("demo");
+        let target_root = temp.path().join("agent-skills");
+        let target_skill = target_root.join("demo");
+
+        fs::create_dir_all(&source_skill).expect("source skill dir");
+        fs::create_dir_all(&target_root).expect("target root");
+        fs::write(
+            source_skill.join("SKILL.md"),
+            "---\nname: demo\ndescription: Demo\n---\nBody",
+        )
+        .expect("skill md");
+        std::os::unix::fs::symlink(&real_library, &alias_library).expect("library alias");
+        std::os::unix::fs::symlink(&source_skill, &target_skill).expect("target symlink");
+
+        let installation = inspect_installation(
+            "test",
+            "Test",
+            "global",
+            &target_root,
+            &target_skill,
+            &alias_library,
+        );
+
+        assert_eq!(installation.status, "linked");
+    }
+
+    #[test]
+    fn restores_project_roots_from_applied_sync_history() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let app_data = temp.path().join("app-data");
+        let plans = app_data.join("plans");
+        let project_root = temp.path().join("project").join(".agents").join("skills");
+        let skipped_root = temp
+            .path()
+            .join("skipped-project")
+            .join(".agents")
+            .join("skills");
+        let plan_id = "batch-sync-test";
+
+        fs::create_dir_all(&plans).expect("plans dir");
+        fs::create_dir_all(&project_root).expect("project root");
+        fs::create_dir_all(&skipped_root).expect("skipped root");
+        fs::write(
+            app_data.join("sync-history.json"),
+            serde_json::json!([{
+                "planId": plan_id,
+                "kind": "batch-sync",
+                "appliedAt": "2026-06-30T00:00:00Z",
+                "appliedOperations": ["applied-op"],
+                "errors": []
+            }])
+            .to_string(),
+        )
+        .expect("history");
+        let plan = SyncPlan {
+            plan_id: plan_id.to_string(),
+            kind: "batch-sync".to_string(),
+            risk_level: "low".to_string(),
+            operations: vec![
+                SyncOperation {
+                    id: "applied-op".to_string(),
+                    op_type: "create-symlink".to_string(),
+                    status: "planned".to_string(),
+                    source_path: Some(path_to_string(
+                        &temp.path().join("library").join("blog-translator"),
+                    )),
+                    target_path: Some(path_to_string(&project_root.join("blog-translator"))),
+                    backup_path: None,
+                    message: "Link blog-translator into AMP".to_string(),
+                    agent_id: Some("amp".to_string()),
+                    skill_id: Some("blog-translator".to_string()),
+                },
+                SyncOperation {
+                    id: "preview-only-op".to_string(),
+                    op_type: "create-symlink".to_string(),
+                    status: "planned".to_string(),
+                    source_path: Some(path_to_string(
+                        &temp.path().join("library").join("blog-translator"),
+                    )),
+                    target_path: Some(path_to_string(&skipped_root.join("blog-translator"))),
+                    backup_path: None,
+                    message: "Preview-only operation".to_string(),
+                    agent_id: Some("amp".to_string()),
+                    skill_id: Some("blog-translator".to_string()),
+                },
+            ],
+            preconditions: Vec::new(),
+            blocked_conflicts: Vec::new(),
+            created_at: "2026-06-30T00:00:00Z".to_string(),
+        };
+        fs::write(
+            plans.join(format!("{plan_id}.json")),
+            serde_json::to_string(&plan).expect("plan json"),
+        )
+        .expect("plan");
+
+        let roots = managed_project_roots_from_history(&app_data).expect("managed roots");
+
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].agent_id, "amp");
+        assert_eq!(roots[0].scope, "project");
+        assert_eq!(roots[0].path, path_to_string(&project_root));
     }
 
     #[test]

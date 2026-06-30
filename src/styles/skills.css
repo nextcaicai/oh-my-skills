@@ -883,6 +883,47 @@
   font-weight: 850;
 }
 
+.skill-reference-cell {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  justify-self: start;
+  width: 100%;
+  min-width: 0;
+  gap: 0 6px;
+  color: var(--app-text);
+}
+
+.skill-reference-cell strong {
+  font-size: 18px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.skill-reference-cell span {
+  color: rgba(23, 25, 28, 0.66);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.skill-reference-cell small {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin-top: 3px;
+  overflow: hidden;
+  color: rgba(23, 25, 28, 0.48);
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-reference-cell.empty strong,
+.skill-reference-cell.empty span {
+  color: rgba(23, 25, 28, 0.42);
+}
+
 .skill-row-meta {
   display: grid;
   justify-items: end;

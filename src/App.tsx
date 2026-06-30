@@ -53,6 +53,7 @@ export default function App() {
   const [skillUpdateChecks, setSkillUpdateChecks] = useState<Record<string, SkillUpdateCheck>>({});
   const [updatingSkillIds, setUpdatingSkillIds] = useState<Set<string>>(new Set());
   const [syncPlan, setSyncPlan] = useState<SyncPlan | null>(null);
+  const [syncPlanProjectFolders, setSyncPlanProjectFolders] = useState<string[]>([]);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [syncMode, setSyncMode] = useState<SyncMode>("quick");
   const [busy, setBusy] = useState("启动中");
@@ -215,7 +216,7 @@ export default function App() {
     }
   }
 
-  async function refreshInventory() {
+  async function refreshInventory(projectFoldersForSelection = settings.projectFolders) {
     setBusy("扫描本机 Agent 与 Skills");
     setError(null);
     if (!isTauriRuntime()) {
@@ -244,10 +245,10 @@ export default function App() {
         return null;
       });
       setSelectedSkillIds((current) => {
-        return filterValidSelectionKeys(current, aggregateSkillsBySlug(next.skills), settings.projectFolders);
+        return filterValidSelectionKeys(current, aggregateSkillsBySlug(next.skills), projectFoldersForSelection);
       });
       setSyncQueuedSkillIds((current) => {
-        return filterValidSelectionKeys(current, aggregateSkillsBySlug(next.skills), settings.projectFolders);
+        return filterValidSelectionKeys(current, aggregateSkillsBySlug(next.skills), projectFoldersForSelection);
       });
     } catch (reason) {
       setError(String(reason));
@@ -277,11 +278,13 @@ export default function App() {
   async function previewSkillsSync(skills = queuedSkills, targets: AgentTarget[] = [], replacements: SyncReplacement[] = []) {
     const sources = syncSourcesForSkills(skills);
     if (sources.length === 0) return;
+    const plannedProjectFolders = projectFoldersFromTargets(targets);
     setBusy("生成同步预览");
     setError(null);
     setApplyResult(null);
     if (!isTauriRuntime()) {
       setSyncPlan(demoBatchPlan(skills, targets, "batch-sync"));
+      setSyncPlanProjectFolders(plannedProjectFolders);
       setView("sync");
       setBusy("");
       return;
@@ -293,8 +296,10 @@ export default function App() {
         replacements
       });
       setSyncPlan(plan);
+      setSyncPlanProjectFolders(plannedProjectFolders);
       setView("sync");
     } catch (reason) {
+      setSyncPlanProjectFolders([]);
       setError(String(reason));
     } finally {
       setBusy("");
@@ -304,11 +309,13 @@ export default function App() {
   async function previewQuickMigration(skills = queuedSkills, method: QuickMigrationMethod, targets: AgentTarget[] = []) {
     const sources = quickMigrationSourcesForSkills(skills);
     if (sources.length === 0) return;
+    const plannedProjectFolders = projectFoldersFromTargets(targets);
     setBusy("生成同步预览");
     setError(null);
     setApplyResult(null);
     if (!isTauriRuntime()) {
       setSyncPlan(demoBatchPlan(skills, targets, "batch-quick-migrate"));
+      setSyncPlanProjectFolders(plannedProjectFolders);
       setView("sync");
       setBusy("");
       return;
@@ -320,8 +327,10 @@ export default function App() {
         method
       });
       setSyncPlan(plan);
+      setSyncPlanProjectFolders(plannedProjectFolders);
       setView("sync");
     } catch (reason) {
+      setSyncPlanProjectFolders([]);
       setError(String(reason));
     } finally {
       setBusy("");
@@ -330,6 +339,7 @@ export default function App() {
 
   async function applyPlan() {
     if (!syncPlan) return;
+    const projectFoldersToRegister = syncPlanProjectFolders;
     setBusy("执行同步计划");
     setError(null);
     if (!isTauriRuntime()) {
@@ -348,8 +358,24 @@ export default function App() {
         planId: syncPlan.planId
       });
       setApplyResult(result);
+      let projectFoldersForRefresh = settings.projectFolders;
+      if (result.errors.length === 0 && projectFoldersToRegister.length > 0) {
+        const nextProjectFolders = mergeProjectFolders(settings.projectFolders, projectFoldersToRegister);
+        if (nextProjectFolders.length !== settings.projectFolders.length) {
+          const saved = await invoke<AppSettings>("save_settings", {
+            settings: {
+              ...settings,
+              projectFolders: nextProjectFolders
+            }
+          });
+          setSettings(saved);
+          setDraftSettings(saved);
+          projectFoldersForRefresh = saved.projectFolders;
+          setToast(`已关联 ${nextProjectFolders.length - settings.projectFolders.length} 个项目工作区`);
+        }
+      }
       if (result.inventoryRefreshRecommended && result.errors.length === 0) {
-        await refreshInventory();
+        await refreshInventory(projectFoldersForRefresh);
       }
     } catch (reason) {
       setError(String(reason));
@@ -366,7 +392,7 @@ export default function App() {
       setSettings(saved);
       setDraftSettings(saved);
       setSettingsOpen(false);
-      await refreshInventory();
+      await refreshInventory(saved.projectFolders);
     } catch (reason) {
       setError(String(reason));
     } finally {
@@ -390,7 +416,7 @@ export default function App() {
         setSettings(nextSettings);
         setDraftSettings(nextSettings);
       }
-      await refreshInventory();
+      await refreshInventory(nextSettings.projectFolders);
       return nextSettings;
     } catch (reason) {
       setError(String(reason));
@@ -757,6 +783,28 @@ function selectionParts(key: string) {
 
 function selectionSkillId(key: string) {
   return selectionParts(key).skillId;
+}
+
+function projectFoldersFromTargets(targets: AgentTarget[]) {
+  return mergeProjectFolders(
+    [],
+    targets
+      .filter((target) => target.scope === "project")
+      .map((target) => target.projectPath?.trim() ?? "")
+      .filter(Boolean)
+  );
+}
+
+function mergeProjectFolders(current: string[], additions: string[]) {
+  const next = [...current];
+  for (const path of additions) {
+    const trimmed = path.trim();
+    if (!trimmed) continue;
+    if (!next.some((existing) => samePath(existing, trimmed))) {
+      next.push(trimmed);
+    }
+  }
+  return next;
 }
 
 function selectedSkillsForKeys(
