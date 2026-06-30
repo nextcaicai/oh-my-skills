@@ -20,7 +20,8 @@ import type {
   SkillLockEntry,
   SkillRecord,
   SkillUpdateCheck,
-  SyncPlan
+  SyncPlan,
+  SyncReplacement
 } from "./types";
 
 const defaultSettings: AppSettings = {
@@ -252,7 +253,7 @@ export default function App() {
     return invoke<InventorySnapshot | null>("read_inventory_cache");
   }
 
-  async function previewSkillsSync(skills = queuedSkills, targets: AgentTarget[] = []) {
+  async function previewSkillsSync(skills = queuedSkills, targets: AgentTarget[] = [], replacements: SyncReplacement[] = []) {
     const sources = syncSourcesForSkills(skills);
     if (sources.length === 0) return;
     setBusy("生成同步预览");
@@ -267,7 +268,8 @@ export default function App() {
     try {
       const plan = await invoke<SyncPlan>("preview_batch_sync", {
         sources,
-        targets
+        targets,
+        replacements
       });
       setSyncPlan(plan);
       setView("sync");
@@ -672,8 +674,8 @@ export default function App() {
                 return next;
               });
             }}
-            onPreviewGlobal={(targets) => void previewSkillsSync(queuedSkills, targets)}
-            onPreviewProject={(targets) => void previewSkillsSync(queuedSkills, targets)}
+            onPreviewGlobal={(targets, replacements) => void previewSkillsSync(queuedSkills, targets, replacements)}
+            onPreviewProject={(targets, replacements) => void previewSkillsSync(queuedSkills, targets, replacements)}
             onPreviewQuick={(method, targets) => void previewQuickMigration(queuedSkills, method, targets)}
             onChooseProject={chooseSyncProject}
             onApply={() => void applyPlan()}

@@ -1,7 +1,7 @@
 use crate::models::{
     AgentTarget, ApplyResult, InstallationRef, InventorySnapshot, ProjectWorkspaceCandidate,
     ScanOptions, Settings, SkillContent, SkillLockEntry, SkillLockFile, SkillRef, SkillUpdateCheck,
-    SyncPlan,
+    SyncPlan, SyncReplacement,
 };
 use crate::{fs_ops, registry, scanner, settings, sync_plan};
 use chrono::Utc;
@@ -165,8 +165,9 @@ pub fn preview_sync(
     app: AppHandle,
     skill_id: String,
     targets: Vec<AgentTarget>,
+    replacements: Option<Vec<SyncReplacement>>,
 ) -> Result<SyncPlan, String> {
-    sync_plan::preview_sync(&app, skill_id, targets)
+    sync_plan::preview_sync(&app, skill_id, targets, replacements.unwrap_or_default())
 }
 
 #[tauri::command]
@@ -174,8 +175,9 @@ pub fn preview_sync_from_installation(
     app: AppHandle,
     source: InstallationRef,
     targets: Vec<AgentTarget>,
+    replacements: Option<Vec<SyncReplacement>>,
 ) -> Result<SyncPlan, String> {
-    sync_plan::preview_sync_from_installation(&app, source, targets)
+    sync_plan::preview_sync_from_installation(&app, source, targets, replacements.unwrap_or_default())
 }
 
 #[tauri::command]
@@ -193,8 +195,9 @@ pub fn preview_batch_sync(
     app: AppHandle,
     sources: Vec<InstallationRef>,
     targets: Vec<AgentTarget>,
+    replacements: Option<Vec<SyncReplacement>>,
 ) -> Result<SyncPlan, String> {
-    sync_plan::preview_batch_sync(&app, sources, targets)
+    sync_plan::preview_batch_sync(&app, sources, targets, replacements.unwrap_or_default())
 }
 
 #[tauri::command]

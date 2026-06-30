@@ -1,21 +1,47 @@
 import type { AgentRecord, InstallationRef, SkillInstallation, SkillLockEntry, SkillRecord, SkillUpdateCheck, SyncPlan } from "../types";
 
 export function syncPlanSummary(plan: SyncPlan) {
+  const replacementTargets = new Set(
+    plan.operations
+      .filter((operation) => operation.opType === "backup-existing" && operation.targetPath)
+      .map((operation) => operation.targetPath)
+  );
+  const repairTargets = new Set(
+    plan.operations
+      .filter((operation) => operation.opType === "remove-existing" && operation.targetPath)
+      .map((operation) => operation.targetPath)
+  );
+
   return plan.operations.reduce(
     (summary, operation) => {
-      if (operation.opType === "create-root") summary.create += 1;
-      if (operation.opType === "copy-to-library") summary.create += 1;
-      if (operation.opType === "copy-to-target") summary.create += 1;
-      if (operation.opType === "remove-existing") summary.overwrite += 1;
-      if (operation.opType === "backup-existing") {
-        summary.backup += 1;
-        summary.overwrite += 1;
+      if (operation.opType === "create-root") summary.createRoot += 1;
+      if (operation.opType === "copy-to-library") summary.importLibrary += 1;
+      if (operation.opType === "copy-to-target") summary.copy += 1;
+      if (operation.opType === "remove-existing") summary.repair += 1;
+      if (operation.opType === "backup-existing") summary.replace += 1;
+      if (operation.opType === "same-content-existing") summary.sameContent += 1;
+      if (operation.opType === "content-conflict") summary.contentConflict += 1;
+      if (operation.opType === "invalid-entry") summary.invalidEntry += 1;
+      if (operation.opType === "create-symlink") {
+        if (!operation.targetPath || (!replacementTargets.has(operation.targetPath) && !repairTargets.has(operation.targetPath))) {
+          summary.symlink += 1;
+        }
       }
-      if (operation.opType === "create-symlink") summary.symlink += 1;
-      if (operation.opType === "noop" || operation.status === "noop") summary.noop += 1;
+      if ((operation.opType === "noop" || operation.status === "noop") && operation.opType !== "same-content-existing") summary.noop += 1;
       return summary;
     },
-    { create: 0, overwrite: 0, backup: 0, symlink: 0, noop: 0 }
+    {
+      createRoot: 0,
+      importLibrary: 0,
+      symlink: 0,
+      copy: 0,
+      replace: 0,
+      repair: 0,
+      sameContent: 0,
+      contentConflict: 0,
+      invalidEntry: 0,
+      noop: 0
+    }
   );
 }
 

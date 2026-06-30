@@ -4,6 +4,7 @@ use crate::fs_ops::{
 };
 use crate::models::{
     AgentTarget, ApplyResult, InstallationRef, ScanOptions, SyncOperation, SyncPlan,
+    SyncReplacement,
 };
 use crate::registry::{detect_agents, find_agent};
 use crate::scanner::{inspect_installation, scan, write_library_index};
@@ -87,13 +88,14 @@ pub fn preview_sync(
     app: &AppHandle,
     skill_id: String,
     targets: Vec<AgentTarget>,
+    replacements: Vec<SyncReplacement>,
 ) -> Result<SyncPlan, String> {
     let settings = load_settings(app)?;
     let library_path = PathBuf::from(&settings.library_path);
     let source_path = library_path.join(&skill_id);
     let plan_id = plan_id("sync");
     let created_at = Utc::now().to_rfc3339();
-    let backup_root = app_data_dir(app)?.join("backups").join(&plan_id);
+    let backup_root = backup_root_for_plan(app, &settings, &plan_id)?;
     let mut operations = Vec::new();
     let mut blocked_conflicts = Vec::new();
     let mut preconditions = Vec::new();
@@ -114,6 +116,7 @@ pub fn preview_sync(
         &source_path,
         source_hash.as_deref(),
         targets,
+        &replacements,
         &backup_root,
         &mut operations,
         &mut blocked_conflicts,
@@ -136,13 +139,14 @@ pub fn preview_sync_from_installation(
     app: &AppHandle,
     source: InstallationRef,
     targets: Vec<AgentTarget>,
+    replacements: Vec<SyncReplacement>,
 ) -> Result<SyncPlan, String> {
     let settings = load_settings(app)?;
     let source_path = PathBuf::from(&source.entry_path);
     let destination = PathBuf::from(&settings.library_path).join(&source.slug);
     let plan_id = plan_id("sync");
     let created_at = Utc::now().to_rfc3339();
-    let backup_root = app_data_dir(app)?.join("backups").join(&plan_id);
+    let backup_root = backup_root_for_plan(app, &settings, &plan_id)?;
     let mut operations = Vec::new();
     let mut blocked_conflicts = Vec::new();
     let mut preconditions = Vec::new();
@@ -202,6 +206,7 @@ pub fn preview_sync_from_installation(
         &destination,
         source_hash.as_deref(),
         targets,
+        &replacements,
         &backup_root,
         &mut operations,
         &mut blocked_conflicts,
@@ -277,12 +282,13 @@ pub fn preview_batch_sync(
     app: &AppHandle,
     sources: Vec<InstallationRef>,
     targets: Vec<AgentTarget>,
+    replacements: Vec<SyncReplacement>,
 ) -> Result<SyncPlan, String> {
     let settings = load_settings(app)?;
     let library_path = PathBuf::from(&settings.library_path);
     let plan_id = plan_id("batch-sync");
     let created_at = Utc::now().to_rfc3339();
-    let backup_root = app_data_dir(app)?.join("backups").join(&plan_id);
+    let backup_root = backup_root_for_plan(app, &settings, &plan_id)?;
     let mut operations = Vec::new();
     let mut blocked_conflicts = Vec::new();
     let mut preconditions = Vec::new();
@@ -312,6 +318,7 @@ pub fn preview_batch_sync(
                 &source_path,
                 source_hash.as_deref(),
                 targets.clone(),
+                &replacements,
                 &backup_root,
                 &mut operations,
                 &mut blocked_conflicts,
@@ -331,6 +338,7 @@ pub fn preview_batch_sync(
                 &destination,
                 None,
                 targets.clone(),
+                &replacements,
                 &backup_root,
                 &mut operations,
                 &mut blocked_conflicts,
@@ -380,6 +388,7 @@ pub fn preview_batch_sync(
             &destination,
             Some(&source_hash),
             targets.clone(),
+            &replacements,
             &backup_root,
             &mut operations,
             &mut blocked_conflicts,
@@ -572,6 +581,7 @@ fn append_sync_operations(
     source_path: &Path,
     source_hash: Option<&str>,
     targets: Vec<AgentTarget>,
+    replacements: &[SyncReplacement],
     backup_root: &Path,
     operations: &mut Vec<SyncOperation>,
     blocked_conflicts: &mut Vec<String>,
@@ -641,6 +651,7 @@ fn append_sync_operations(
                 source_hash,
                 &root_path,
                 &target_path,
+                replacement_selected(replacements, &agent.id, skill_id, &target_path),
                 backup_root,
                 operations,
                 blocked_conflicts,
@@ -656,6 +667,33 @@ fn push_blocked_conflict_once(blocked_conflicts: &mut Vec<String>, message: Stri
     {
         blocked_conflicts.push(message);
     }
+}
+
+fn replacement_selected(
+    replacements: &[SyncReplacement],
+    agent_id: &str,
+    skill_id: &str,
+    target_path: &Path,
+) -> bool {
+    let target_path = path_to_string(target_path);
+    replacements.iter().any(|replacement| {
+        replacement.agent_id == agent_id
+            && replacement.skill_id == skill_id
+            && replacement.target_path == target_path
+    })
+}
+
+fn backup_root_for_plan(
+    app: &AppHandle,
+    settings: &crate::models::Settings,
+    plan_id: &str,
+) -> Result<PathBuf, String> {
+    let library_path = PathBuf::from(&settings.library_path);
+    let backup_home = library_path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or(app_data_dir(app)?);
+    Ok(backup_home.join("backups").join(plan_id))
 }
 
 fn sync_plan_from_parts(
@@ -783,6 +821,7 @@ fn plan_target_sync(
     source_hash: Option<&str>,
     root_path: &Path,
     target_path: &Path,
+    replace_same_content: bool,
     backup_root: &Path,
     operations: &mut Vec<SyncOperation>,
     blocked_conflicts: &mut Vec<String>,
@@ -853,33 +892,69 @@ fn plan_target_sync(
 
     if let Some(hash) = &installation.hash {
         if hash == source_hash {
+            if replace_same_content {
+                operations.push(operation(
+                    "backup-existing",
+                    "planned",
+                    None,
+                    Some(target_path),
+                    Some(&backup_path),
+                    &format!("Back up existing same-content skill in {}", agent_label),
+                    Some(agent_id),
+                    Some(skill_id),
+                ));
+                operations.push(operation(
+                    "create-symlink",
+                    "planned",
+                    Some(source_path),
+                    Some(target_path),
+                    None,
+                    &format!("Link central {} into {}", skill_id, agent_label),
+                    Some(agent_id),
+                    Some(skill_id),
+                ));
+            } else {
+                operations.push(operation(
+                    "same-content-existing",
+                    "noop",
+                    Some(source_path),
+                    Some(target_path),
+                    None,
+                    &format!(
+                        "{} already has {} with the same content; keeping existing entry",
+                        agent_label, skill_id
+                    ),
+                    Some(agent_id),
+                    Some(skill_id),
+                ));
+            }
+        } else {
             operations.push(operation(
-                "backup-existing",
-                "planned",
-                None,
-                Some(target_path),
-                Some(&backup_path),
-                &format!("Back up existing same-content skill in {}", agent_label),
-                Some(agent_id),
-                Some(skill_id),
-            ));
-            operations.push(operation(
-                "create-symlink",
-                "planned",
+                "content-conflict",
+                "blocked",
                 Some(source_path),
                 Some(target_path),
                 None,
-                &format!("Link central {} into {}", skill_id, agent_label),
+                &format!("{} already has {} with different content", agent_label, skill_id),
                 Some(agent_id),
                 Some(skill_id),
             ));
-        } else {
             blocked_conflicts.push(format!(
                 "{} already has {} with different content",
                 agent_label, skill_id
             ));
         }
     } else {
+        operations.push(operation(
+            "invalid-entry",
+            "blocked",
+            Some(source_path),
+            Some(target_path),
+            None,
+            &format!("{} has an invalid or unreadable {} entry", agent_label, skill_id),
+            Some(agent_id),
+            Some(skill_id),
+        ));
         blocked_conflicts.push(format!(
             "{} has an invalid or unreadable {} entry",
             agent_label, skill_id
@@ -896,11 +971,10 @@ fn plan_quick_target(
     root_path: &Path,
     target_path: &Path,
     method: &str,
-    backup_root: &Path,
+    _backup_root: &Path,
     operations: &mut Vec<SyncOperation>,
     blocked_conflicts: &mut Vec<String>,
 ) {
-    let backup_path = backup_root.join(agent_id).join(skill_id);
     let source_hash = source_hash.unwrap_or_default();
     let final_op = if method == "symlink" {
         "create-symlink"
@@ -976,49 +1050,46 @@ fn plan_quick_target(
 
     if let Some(hash) = &installation.hash {
         if hash == source_hash {
-            if method == "copy" {
-                operations.push(operation(
-                    "noop",
-                    "noop",
-                    Some(source_path),
-                    Some(target_path),
-                    None,
-                    &format!(
-                        "{} already exists with the same content in {}",
-                        skill_id, agent_label
-                    ),
-                    Some(agent_id),
-                    Some(skill_id),
-                ));
-            } else {
-                operations.push(operation(
-                    "backup-existing",
-                    "planned",
-                    None,
-                    Some(target_path),
-                    Some(&backup_path),
-                    &format!("Back up existing same-content skill in {}", agent_label),
-                    Some(agent_id),
-                    Some(skill_id),
-                ));
-                operations.push(operation(
-                    final_op,
-                    "planned",
-                    Some(source_path),
-                    Some(target_path),
-                    None,
-                    &final_message,
-                    Some(agent_id),
-                    Some(skill_id),
-                ));
-            }
+            operations.push(operation(
+                "same-content-existing",
+                "noop",
+                Some(source_path),
+                Some(target_path),
+                None,
+                &format!(
+                    "{} already exists with the same content in {}; keeping existing entry",
+                    skill_id, agent_label
+                ),
+                Some(agent_id),
+                Some(skill_id),
+            ));
         } else {
+            operations.push(operation(
+                "content-conflict",
+                "blocked",
+                Some(source_path),
+                Some(target_path),
+                None,
+                &format!("{} already has {} with different content", agent_label, skill_id),
+                Some(agent_id),
+                Some(skill_id),
+            ));
             blocked_conflicts.push(format!(
                 "{} already has {} with different content",
                 agent_label, skill_id
             ));
         }
     } else {
+        operations.push(operation(
+            "invalid-entry",
+            "blocked",
+            Some(source_path),
+            Some(target_path),
+            None,
+            &format!("{} has an invalid or unreadable {} entry", agent_label, skill_id),
+            Some(agent_id),
+            Some(skill_id),
+        ));
         blocked_conflicts.push(format!(
             "{} has an invalid or unreadable {} entry",
             agent_label, skill_id
@@ -1212,7 +1283,7 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn plans_same_hash_directory_as_backup_then_link() {
+    fn keeps_same_hash_directory_by_default() {
         let temp = tempfile::tempdir().expect("temp dir");
         let source = temp.path().join("library").join("demo");
         let root = temp.path().join("agent");
@@ -1241,6 +1312,48 @@ mod tests {
             Some(&source_hash),
             &root,
             &target,
+            false,
+            &temp.path().join("backups"),
+            &mut operations,
+            &mut conflicts,
+        );
+
+        assert!(conflicts.is_empty());
+        assert_eq!(operations[0].op_type, "same-content-existing");
+        assert_eq!(operations[0].status, "noop");
+    }
+
+    #[test]
+    fn explicitly_replaces_same_hash_directory_with_link() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let source = temp.path().join("library").join("demo");
+        let root = temp.path().join("agent");
+        let target = root.join("demo");
+        fs::create_dir_all(&source).expect("source");
+        fs::create_dir_all(&target).expect("target");
+        fs::write(
+            source.join("SKILL.md"),
+            "---\nname: demo\ndescription: Demo\n---\nBody",
+        )
+        .expect("source skill");
+        fs::write(
+            target.join("SKILL.md"),
+            "---\nname: demo\ndescription: Demo\n---\nBody",
+        )
+        .expect("target skill");
+
+        let source_hash = hash_dir(&source).expect("hash");
+        let mut operations = Vec::new();
+        let mut conflicts = Vec::new();
+        plan_target_sync(
+            "agent",
+            "Agent",
+            "demo",
+            &source,
+            Some(&source_hash),
+            &root,
+            &target,
+            true,
             &temp.path().join("backups"),
             &mut operations,
             &mut conflicts,
@@ -1281,12 +1394,15 @@ mod tests {
             Some(&source_hash),
             &root,
             &target,
+            false,
             &temp.path().join("backups"),
             &mut operations,
             &mut conflicts,
         );
 
-        assert!(operations.is_empty());
+        assert_eq!(operations.len(), 1);
+        assert_eq!(operations[0].op_type, "content-conflict");
+        assert_eq!(operations[0].status, "blocked");
         assert_eq!(conflicts.len(), 1);
     }
 
@@ -1325,6 +1441,7 @@ mod tests {
             Some(&source_hash),
             &root,
             &target,
+            false,
             &temp.path().join("backups"),
             &mut operations,
             &mut conflicts,
@@ -1333,6 +1450,86 @@ mod tests {
         assert!(conflicts.is_empty());
         assert_eq!(operations[0].op_type, "copy-to-library");
         assert_eq!(operations[1].op_type, "create-symlink");
+    }
+
+    #[test]
+    fn plans_missing_target_as_symlink_creation() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let source = temp.path().join("library").join("demo");
+        let root = temp.path().join("agent");
+        let target = root.join("demo");
+        fs::create_dir_all(&source).expect("source");
+        fs::create_dir_all(&root).expect("root");
+        fs::write(
+            source.join("SKILL.md"),
+            "---\nname: demo\ndescription: Demo\n---\nBody",
+        )
+        .expect("source skill");
+
+        let source_hash = hash_dir(&source).expect("hash");
+        let mut operations = Vec::new();
+        let mut conflicts = Vec::new();
+        plan_target_sync(
+            "agent",
+            "Agent",
+            "demo",
+            &source,
+            Some(&source_hash),
+            &root,
+            &target,
+            false,
+            &temp.path().join("backups"),
+            &mut operations,
+            &mut conflicts,
+        );
+
+        assert!(conflicts.is_empty());
+        assert_eq!(operations.len(), 1);
+        assert_eq!(operations[0].op_type, "create-symlink");
+        assert_eq!(operations[0].target_path, Some(path_to_string(&target)));
+    }
+
+    #[test]
+    fn project_scope_returns_creatable_root_when_skills_directory_is_missing() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let agent = find_agent("cline").expect("cline agent");
+        let roots = project_roots_for_folder(&agent, &path_to_string(temp.path()));
+
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].0, "project");
+        assert_eq!(roots[0].1, temp.path().join(".cline").join("skills"));
+        assert!(!roots[0].1.exists());
+    }
+
+    #[test]
+    fn replacement_selection_is_target_path_specific() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let selected_target = temp.path().join("agent-a").join("demo");
+        let other_target = temp.path().join("agent-b").join("demo");
+        let replacements = vec![SyncReplacement {
+            agent_id: "agent-a".to_string(),
+            skill_id: "demo".to_string(),
+            target_path: path_to_string(&selected_target),
+        }];
+
+        assert!(replacement_selected(
+            &replacements,
+            "agent-a",
+            "demo",
+            &selected_target
+        ));
+        assert!(!replacement_selected(
+            &replacements,
+            "agent-a",
+            "demo",
+            &other_target
+        ));
+        assert!(!replacement_selected(
+            &replacements,
+            "agent-b",
+            "demo",
+            &selected_target
+        ));
     }
 
     #[cfg(unix)]
@@ -1362,6 +1559,7 @@ mod tests {
             Some(&source_hash),
             &root,
             &target,
+            false,
             &temp.path().join("backups"),
             &mut operations,
             &mut conflicts,

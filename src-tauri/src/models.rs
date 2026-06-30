@@ -232,6 +232,14 @@ pub struct AgentTarget {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct SyncReplacement {
+    pub agent_id: String,
+    pub skill_id: String,
+    pub target_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncPlan {
     pub plan_id: String,
     pub kind: String,

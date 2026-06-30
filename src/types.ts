@@ -154,6 +154,12 @@ export type AgentTarget = {
   projectPath?: string;
 };
 
+export type SyncReplacement = {
+  agentId: string;
+  skillId: string;
+  targetPath: string;
+};
+
 export type SyncOperation = {
   id: string;
   opType: string;
