@@ -1331,12 +1331,13 @@ mod tests {
             .find(|agent| agent.id == "trae")
             .expect("trae");
         let names = app_names_for_detection(&agent);
+        let expected = normalize_app_name("TRAE.app");
 
-        assert!(names.contains(&"TRAE.app".to_string()));
+        assert!(names.contains(&expected));
         assert_eq!(
             names
                 .iter()
-                .filter(|name| name.eq_ignore_ascii_case("trae.app"))
+                .filter(|name| name.eq_ignore_ascii_case(&expected))
                 .count(),
             1
         );

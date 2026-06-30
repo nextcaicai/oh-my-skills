@@ -5,10 +5,15 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch or tag to build from
+        required: false
+        default: main
 
 jobs:
-  release:
-    name: Release (${{ matrix.os }})
+  build:
+    name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -16,15 +21,19 @@ jobs:
         include:
           - os: macos-latest
             args: --target aarch64-apple-darwin
+            build_command: tauri:build:macos
             artifact_name: oh-my-skills-dmg
             artifact_path: src-tauri/target/release/bundle/dmg/*.dmg
           - os: windows-latest
             args: ""
+            build_command: tauri:build:windows
             artifact_name: oh-my-skills-windows-nsis
             artifact_path: src-tauri/target/release/bundle/nsis/*setup.exe
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -38,7 +47,8 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build and release
+      - name: Build and publish release
+        if: github.event_name == 'push'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -57,9 +67,13 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
-      - name: Upload installer artifact (backup)
+      - name: Build installers (manual)
+        if: github.event_name == 'workflow_dispatch'
+        run: npm run ${{ matrix.build_command }}
+
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_path }}
-          if-no-files-found: warn
+          if-no-files-found: error
