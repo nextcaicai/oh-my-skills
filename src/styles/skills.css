@@ -685,8 +685,8 @@
 }
 
 .skill-list-board.has-selection-bar .skill-list {
-  padding-bottom: 112px;
-  scroll-padding-bottom: 112px;
+  padding-bottom: 100px;
+  scroll-padding-bottom: 100px;
 }
 
 .skill-row {
