@@ -441,8 +441,9 @@ export function SyncView({
         <div className="sync-action-bar">
           {applyResult ? (
             <div className={`apply-result ${applyResult.errors.length ? "error" : "success"}`} role="status">
-              <strong>{applyResult.errors.length ? "执行完成，但有错误" : "执行完成"}</strong>
-              <span>{activePlan && summary ? applyResultSummary(activePlan, summary, selectedSkillCount, applyResult) : `${applyResult.appliedOperations.length} 已执行 · ${applyResult.skippedOperations.length} 已跳过`}</span>
+              <span>
+                {applyResult.errors.length ? "执行完成，但有错误" : "执行完成"} · {activePlan && summary ? applyResultSummary(activePlan, summary, selectedSkillCount, applyResult) : `${applyResult.appliedOperations.length} 已执行 · ${applyResult.skippedOperations.length} 已跳过`}
+              </span>
               {applyResult.errors.map((item) => <code key={item}>{item}</code>)}
             </div>
           ) : activePlan ? (
