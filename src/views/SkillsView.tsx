@@ -5,7 +5,7 @@ import { AgentEmptyVisual, ProjectEmptyVisual } from "../components/EmptyStateVi
 import { AgentBadge, AgentIcon, Coverage, IssueList, SkillState } from "../components/shared";
 import { demoAgent } from "../lib/demoData";
 import { isTauriRuntime } from "../lib/runtime";
-import { agentSkillCount, centralLibraryReferenceSummary, compactPath, projectName, projectStats, samePath, skillListStatus, skillSourceSummary } from "../lib/skillUtils";
+import { agentSkillCount, centralLibraryReferenceSummary, compactPath, isCentralLibraryReference, projectName, projectStats, samePath, skillListStatus, skillSourceSummary } from "../lib/skillUtils";
 import type { AgentRecord, ProjectWorkspaceCandidate, Settings as AppSettings, SkillLockEntry, SkillRecord, SkillUpdateCheck } from "../types";
 import type { SkillWorkspace } from "../uiTypes";
 
@@ -406,6 +406,7 @@ export function SkillsView({
                         skill={skill}
                         settings={settings}
                         skillLocks={skillLocks}
+                        workspace={workspace}
                       />
                     )}
                   </Fragment>
@@ -703,39 +704,24 @@ function SkillReferenceCell({ skill }: { skill: SkillRecord }) {
 function SkillDetail({
   skill,
   settings,
-  skillLocks
+  skillLocks,
+  workspace
 }: {
   skill: SkillRecord;
   settings: AppSettings;
   skillLocks: Record<string, SkillLockEntry>;
+  workspace: SkillWorkspace;
 }) {
   const source = skillSourceSummary(skill, skillLocks);
-  const localPaths = skillLocalPaths(skill);
+  const pathSections = skillPathSections(skill, workspace);
 
   return (
     <div className="skill-detail">
-      {localPaths.length > 0 && (
-        <DetailField label="本地路径">
-          <div className="detail-path-list">
-            {localPaths.map((item) => (
-              <div className="detail-path-row" key={item.id}>
-                <code title={item.path}>{settings.showRawPaths ? item.path : compactPath(item.path)}</code>
-                <button
-                  className="meta-icon-button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void openPath(item.path);
-                  }}
-                  title="打开本地路径"
-                  type="button"
-                >
-                  <FolderOpen size={15} />
-                </button>
-              </div>
-            ))}
-          </div>
+      {pathSections.map((section) => (
+        <DetailField label={section.label} key={section.label}>
+          <PathList paths={section.paths} showRawPaths={settings.showRawPaths} />
         </DetailField>
-      )}
+      ))}
 
       <DetailField label="描述">
         <p>{skill.description || skill.slug}</p>
@@ -767,17 +753,55 @@ function SkillDetail({
   );
 }
 
-function skillLocalPaths(skill: SkillRecord) {
-  const paths: { id: string; path: string }[] = [];
+type DetailPath = { id: string; path: string };
+type DetailPathSection = { label: string; paths: DetailPath[] };
 
-  if (skill.canonicalPath) {
-    paths.push({
-      id: `library:${skill.canonicalPath}`,
-      path: skill.canonicalPath
-    });
+function skillPathSections(skill: SkillRecord, workspace: SkillWorkspace): DetailPathSection[] {
+  if (workspace === "library") {
+    return compactSections([
+      {
+        label: "中心库路径",
+        paths: skill.canonicalPath ? [{ id: `library:${skill.canonicalPath}`, path: skill.canonicalPath }] : []
+      },
+      {
+        label: "引用位置",
+        paths: uniqueInstallationPaths(skill.installations.filter((installation) => isCentralLibraryReference(skill, installation)))
+      }
+    ]);
   }
 
-  for (const installation of skill.installations) {
+  if (workspace === "global") {
+    return compactSections([
+      {
+        label: "全局路径",
+        paths: uniqueInstallationPaths(skill.installations.filter((installation) => installation.scope === "global"))
+      },
+      {
+        label: "中心库路径",
+        paths: skill.canonicalPath ? [{ id: `library:${skill.canonicalPath}`, path: skill.canonicalPath }] : []
+      }
+    ]);
+  }
+
+  return compactSections([
+    {
+      label: "项目路径",
+      paths: uniqueInstallationPaths(skill.installations.filter((installation) => installation.scope === "project"))
+    },
+    {
+      label: "中心库路径",
+      paths: skill.canonicalPath ? [{ id: `library:${skill.canonicalPath}`, path: skill.canonicalPath }] : []
+    }
+  ]);
+}
+
+function compactSections(sections: DetailPathSection[]) {
+  return sections.filter((section) => section.paths.length > 0);
+}
+
+function uniqueInstallationPaths(installations: SkillRecord["installations"]) {
+  const paths: DetailPath[] = [];
+  for (const installation of installations) {
     if (!installation.entryPath) continue;
     if (paths.some((item) => samePath(item.path, installation.entryPath))) continue;
     paths.push({
@@ -785,8 +809,30 @@ function skillLocalPaths(skill: SkillRecord) {
       path: installation.entryPath
     });
   }
-
   return paths;
+}
+
+function PathList({ paths, showRawPaths }: { paths: DetailPath[]; showRawPaths: boolean }) {
+  return (
+    <div className="detail-path-list">
+      {paths.map((item) => (
+        <div className="detail-path-row" key={item.id}>
+          <code title={item.path}>{showRawPaths ? item.path : compactPath(item.path)}</code>
+          <button
+            className="meta-icon-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void openPath(item.path);
+            }}
+            title="打开路径"
+            type="button"
+          >
+            <FolderOpen size={15} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function DetailField({ label, children }: { label: string; children: ReactNode }) {
