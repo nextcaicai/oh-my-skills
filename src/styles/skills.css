@@ -646,6 +646,7 @@
 .skill-list-board {
   --skill-list-left-gutter: 18px;
   --skill-list-right-gutter: 18px;
+  --skill-table-columns: 34px minmax(260px, 1fr) 180px 75px;
   display: grid;
   flex: 1;
   min-height: 0;
@@ -659,10 +660,9 @@
 
 .skill-table-head {
   display: grid;
-  grid-template-columns: 34px minmax(260px, 1fr) 180px 75px;
+  grid-template-columns: var(--skill-table-columns);
   gap: 10px;
   align-items: center;
-  margin-right: 18px;
   min-height: 28px;
   padding: 0 var(--skill-list-right-gutter) 0 var(--skill-list-left-gutter);
   border-bottom: 1px solid rgba(24, 26, 29, 0.08);
@@ -671,7 +671,13 @@
   font-weight: 850;
 }
 
+.skill-table-head span:nth-child(3) {
+  justify-self: start;
+  text-align: left;
+}
+
 .skill-table-head span:nth-child(4) {
+  justify-self: center;
   text-align: center;
 }
 
@@ -691,7 +697,7 @@
 
 .skill-row {
   display: grid;
-  grid-template-columns: 34px minmax(260px, 1fr) 180px 75px;
+  grid-template-columns: var(--skill-table-columns);
   align-items: center;
   gap: 10px;
   min-height: 62px;
@@ -807,6 +813,8 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  justify-self: start;
+  width: 100%;
   gap: 7px;
   min-width: 0;
 }
